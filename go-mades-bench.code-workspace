@@ -1,0 +1,41 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"aesgcm",
+			"akshaybharambe",
+			"AMQP",
+			"APIAMQP",
+			"beevik",
+			"Canonicalization",
+			"canonicalize",
+			"canonicalized",
+			"canonicalizer",
+			"cdtypes",
+			"CDURL",
+			"crypter",
+			"etree",
+			"GCMIV",
+			"gofl",
+			"hasher",
+			"keypair",
+			"mades",
+			"mapstructure",
+			"msgtypes",
+			"Mversion",
+			"Receival",
+			"RSASHA",
+			"signedxml",
+			"truststore",
+			"ucarion",
+			"Uncompress",
+			"vennekilde",
+			"zapcore"
+		],
+		"makefile.extensionOutputFolder": "./.vscode"
+	}
+}
