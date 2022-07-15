@@ -14,7 +14,7 @@
                 /*"-n=1",
                 "-outbox-addr=amqp://192.168.0.100:13001",
                 "-receiver=ecp-endpoint",
-                "-size=2000",
+                "-size=1000000",
                 "-goroutines=16",
                 "-inbox-addr=amqps://192.168.0.100:11005",
                 "-inbox=ecp.endpoint.inbox",
@@ -45,12 +45,28 @@
                 "-inbox-pass=password"*/
 
 
-               "-n=1000",
+                "-n=100",
                 "-outbox-addr=amqp://192.168.0.100:13001",
                 "-inbox-addr=amqp://192.168.0.100:13001",
                 "-receiver=TEST-CODE",
-                "-size=2000",
+                "-size=1000000",
                 "-goroutines=16",
+  
+                
+                /*"-n=100",
+                "-outbox-addr=amqp://192.168.0.100:13001",
+                "-receiver=ecp-endpoint",
+                "-size=1000000",
+                "-goroutines=16",
+                "-inbox-addr=amqps://192.168.0.100:11005",
+                "-inbox=ecp.endpoint.outbox.reply",
+                "-inbox-user=endpoint",
+                "-inbox-pass=password",
+                "-outbox-addr=amqps://192.168.0.100:11005",
+                "-outbox=ecp.endpoint.outbox",
+                "-outbox-user=endpoint",
+                "-outbox-pass=password"
+                */
             ]
         }
     ] 

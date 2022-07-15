@@ -4,8 +4,10 @@ import (
 	"context"
 	"crypto/tls"
 	"flag"
+	"fmt"
 	"log"
 	"math/rand"
+	"os"
 	"runtime"
 	"strings"
 	"sync"
@@ -16,163 +18,290 @@ import (
 	"github.com/google/uuid"
 )
 
-var client *amqp.Client
+type Bencher struct {
+	m sync.Mutex
+
+	payloadSize  int
+	payloadCount int
+	receiverCode string
+	messageType  string
+	goroutines   int
+	maxInTransit int
+
+	outboxReply       string
+	outbox            string
+	outboxSocketAddr  string
+	outboxAmqpUser    string
+	outboxAmqpPass    string
+	outboxClient      *amqp.Client
+	outboxSender      *amqp.Sender
+	outboxAckReceiver *amqp.Receiver
+
+	inbox           string
+	inboxSocketAddr string
+	inboxAmqpUser   string
+	inboxAmqpPass   string
+	inboxClient     *amqp.Client
+	inboxReceiver   *amqp.Receiver
+
+	senderWg     sync.WaitGroup
+	receiverWg   sync.WaitGroup
+	timeStart    time.Time
+	timeEnd      time.Time
+	counter      int32
+	messageStats map[string]MessageStats
+}
+
+type MessageStats struct {
+	timeSent     time.Time
+	timeReceived time.Time
+}
 
 func main() {
-	payloadSize := flag.Int("size", 1000000, "an int") //1000000 = 1mb
-	outboxSocketAddr := flag.String("outbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
-	inboxSocketAddr := flag.String("inbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
-	outboxAmqpUser := flag.String("outbox-user", "admin", "an int")
-	outboxAmqpPass := flag.String("outbox-pass", "admin", "an int")
-	inboxAmqpUser := flag.String("inbox-user", "admin", "an int")
-	inboxAmqpPass := flag.String("inbox-pass", "admin", "an int")
-	payloadCount := flag.Int("n", 10000, "an int")
-	//measureFrom := flag.Int("n", 0, "an int")
-	//measureTo := flag.Int("n", 0, "an int")
-	outbox := flag.String("outbox", "mades.endpoint.outbox", "an int")
-	//outboxReply := flag.String("outbox-reply", "mades.endpoint.outbox.reply", "an int")
-	inbox := flag.String("inbox", "mades.endpoint.inbox", "an int")
-	receiverCode := flag.String("receiver", "TEST-CODE", "an int")
-	messageType := flag.String("message-type", "TEST-MESSAGE", "an int")
-	goroutines := flag.Int("goroutines", runtime.NumCPU(), "an int")
+	bencher := Bencher{
+		payloadSize:      *flag.Int("size", 1000000, "Incompressible payload size to generate"), //1000000 = 1mb,
+		payloadCount:     *flag.Int("n", 10000, "Number of messages to send"),
+		maxInTransit:     *flag.Int("max-in-transit", -1, "Max messages allowed in transit. max-in-transit < 0 means unlimited"),
+		receiverCode:     *flag.String("receiver", "TEST-CODE", "Receiver Component Code"),
+		messageType:      *flag.String("message-type", "TEST-MESSAGE", "Message type to send messages with"),
+		goroutines:       *flag.Int("goroutines", runtime.NumCPU(), "Number of go routines to use when sending"),
+		outboxReply:      *flag.String("outbox-reply", "ecp.endpoint.outbox.reply", "outbox reply queue"),
+		outbox:           *flag.String("outbox", "ecp.endpoint.outbox", "outbox queue"),
+		outboxSocketAddr: *flag.String("outbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker"),
+		outboxAmqpUser:   *flag.String("outbox-user", "admin", "Outbox broker username"),
+		outboxAmqpPass:   *flag.String("outbox-pass", "password", "Outbox broker password"),
+		inbox:            *flag.String("inbox", "ecp.endpoint.inbox", "inbox queue"),
+		inboxSocketAddr:  *flag.String("inbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker"),
+		inboxAmqpUser:    *flag.String("inbox-user", "admin", "Inbox broker password"),
+		inboxAmqpPass:    *flag.String("inbox-pass", "password", "Inbox broker username"),
+	}
+
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
-	var counter int32 = int32(*payloadCount)
+	defer bencher.close()
+	bencher.prepareOutbox()
+	bencher.prepareInbox()
+	bencher.cleanInbox()
+	bencher.startBenching()
+	bencher.printBenchResults()
+}
 
+func (bencher *Bencher) prepareOutbox() {
 	// Create outboxClient
 	outboxClientOpts := []amqp.ConnOption{
-		amqp.ConnSASLPlain(*outboxAmqpUser, *outboxAmqpPass),
+		amqp.ConnSASLPlain(bencher.outboxAmqpUser, bencher.outboxAmqpPass),
 	}
-	if strings.HasPrefix(*outboxSocketAddr, "amqps://") {
+	if strings.HasPrefix(bencher.outboxSocketAddr, "amqps://") {
 		outboxClientOpts = append(outboxClientOpts, amqp.ConnTLSConfig(&tls.Config{
 			InsecureSkipVerify: true,
 		}))
 	}
 
-	outboxClient, err := amqp.Dial(*outboxSocketAddr, outboxClientOpts...)
+	outboxClient, err := amqp.Dial(bencher.outboxSocketAddr, outboxClientOpts...)
 	if err != nil {
 		log.Fatal("Dialing AMQP outbox server:", err)
 	}
-	defer outboxClient.Close()
 
 	sendSession, err := outboxClient.NewSession()
 	if err != nil {
-		log.Fatal("Creating AMQP receive session:", err)
+		log.Fatal("Creating AMQP outbox sender session:", err)
 	}
-	// Create a sender
-	sender, err := sendSession.NewSender(
-		amqp.LinkTargetAddress(*outbox),
+
+	recvSession, err := outboxClient.NewSession()
+	if err != nil {
+		log.Fatal("Creating AMQP outbox receive session:", err)
+	}
+
+	// Create outbox sender
+	bencher.outboxSender, err = sendSession.NewSender(
+		amqp.LinkTargetAddress(bencher.outbox),
 	)
 	if err != nil {
-		log.Fatal("Creating sender link:", err)
+		log.Fatal("Creating outbox sender link:", err)
 	}
-	defer sender.Close(context.Background())
 
+	// Create outbox reply receiver
+	bencher.outboxAckReceiver, err = recvSession.NewReceiver(
+		amqp.LinkSourceAddress(bencher.outboxReply),
+		amqp.LinkCredit(10),
+	)
+	if err != nil {
+		log.Fatal("Creating outbox receiver link:", err)
+	}
+}
+
+func (bencher *Bencher) prepareInbox() {
 	// Create inboxClient
 	inboxClientOpts := []amqp.ConnOption{
-		amqp.ConnSASLPlain(*inboxAmqpUser, *inboxAmqpPass),
+		amqp.ConnSASLPlain(bencher.inboxAmqpUser, bencher.inboxAmqpPass),
 	}
-	if strings.HasPrefix(*inboxSocketAddr, "amqps://") {
+	if strings.HasPrefix(bencher.inboxSocketAddr, "amqps://") {
 		inboxClientOpts = append(inboxClientOpts, amqp.ConnTLSConfig(&tls.Config{
 			InsecureSkipVerify: true,
 		}))
 	}
 
-	inboxClient, err := amqp.Dial(*inboxSocketAddr, inboxClientOpts...)
+	inboxClient, err := amqp.Dial(bencher.inboxSocketAddr, inboxClientOpts...)
 	if err != nil {
 		log.Fatal("Dialing AMQP inbox server:", err)
 	}
-	defer inboxClient.Close()
 
 	recvSession, err := inboxClient.NewSession()
 	if err != nil {
-		log.Fatal("Creating AMQP receive session:", err)
+		log.Fatal("Creating AMQP inbox receive session:", err)
 	}
 
 	// Create a receiver
-	receiver, err := recvSession.NewReceiver(
-		amqp.LinkSourceAddress(*inbox),
+	bencher.inboxReceiver, err = recvSession.NewReceiver(
+		amqp.LinkSourceAddress(bencher.inbox),
 		amqp.LinkCredit(10),
 	)
 	if err != nil {
-		log.Fatal("Creating receiver link:", err)
+		log.Fatal("Creating inbox receiver link:", err)
 	}
-	defer receiver.Close(context.Background())
+}
 
+func (bencher *Bencher) cleanInbox() {
 	// Drain inbox before testing
 	log.Println("Cleaning inbox before commencing test...")
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-		msg, err := receiver.Receive(ctx)
+		msg, err := bencher.inboxReceiver.Receive(ctx)
 		cancel()
 		if err != nil {
 			break
 		}
-		receiver.AcceptMessage(context.Background(), msg)
+		bencher.inboxReceiver.AcceptMessage(context.Background(), msg)
 	}
+}
 
-	timeStart := time.Now()
-	log.Printf("Starting %s\n", timeStart.String())
-	var senderWg sync.WaitGroup
-	var receiverWg sync.WaitGroup
-	for k := 0; k < *goroutines; k++ {
-		senderWg.Add(1)
+func (bencher *Bencher) startBenching() {
+	bencher.counter = int32(bencher.payloadCount)
+	bencher.timeStart = time.Now()
+	bencher.receiverWg.Add(bencher.payloadCount)
+
+	log.Printf("Starting %s\n", bencher.timeStart.String())
+
+	bencher.sendMessages()
+	go bencher.receiveMessages()
+	go bencher.receiveAcks()
+
+	bencher.senderWg.Wait()
+	bencher.receiverWg.Wait()
+	bencher.timeEnd = time.Now()
+}
+
+func (bencher *Bencher) sendMessages() {
+	for k := 0; k < bencher.goroutines; k++ {
+		bencher.senderWg.Add(1)
 		go func() {
-			defer senderWg.Done()
+			log.Printf("starting outbox worker #%d\n", k)
+			defer bencher.senderWg.Done()
 
-			for atomic.AddInt32(&counter, -1) >= 0 {
-				payload := make([]byte, *payloadSize)
+			for atomic.AddInt32(&bencher.counter, -1) >= 0 {
+				payload := make([]byte, bencher.payloadSize)
 				fillPayloadWithData(payload)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+				creationTime := time.Now()
+				correlationID := uuid.New().String()
 				msg := &amqp.Message{
 					Data: [][]byte{payload},
 					ApplicationProperties: map[string]interface{}{
-						"receiverCode":      *receiverCode,
-						"messageType":       *messageType,
+						"receiverCode":      bencher.receiverCode,
+						"messageType":       bencher.messageType,
 						"baMessageID":       uuid.New().String(),
 						"senderApplication": "Go-MADES-Bench",
 					},
-					Properties: &amqp.MessageProperties{CreationTime: &timeStart},
+					Properties: &amqp.MessageProperties{
+						CreationTime:  &creationTime,
+						CorrelationID: correlationID,
+					},
 				}
-				err := sender.Send(ctx, msg)
+				// Send message to outbox
+				err := bencher.outboxSender.Send(ctx, msg)
 				if err != nil {
 					log.Fatal("Sending message:", err)
 				}
 				cancel()
+
+				bencher.m.Lock()
+				bencher.messageStats[correlationID] = MessageStats{
+					timeSent: time.Now(),
+				}
+				bencher.m.Unlock()
 			}
+			log.Printf("outbox worker #%d completed\n", k)
 		}()
 	}
+}
 
-	receiverWg.Add(*payloadCount)
-	recvCount := 0
-	go func() {
-		for i := 0; i < *payloadCount; i++ {
-			ctx := context.Background()
-			// Receive next message
-			msg, err := receiver.Receive(ctx)
-			if err != nil {
-				log.Fatal("Reading message from AMQP:", err)
-			}
-
-			// Accept message
-			err = receiver.AcceptMessage(ctx, msg)
-			if err != nil {
-				log.Fatal("Accepting message from AMQP:", err)
-			}
-			receiverWg.Done()
-			recvCount++
-			log.Printf("received %d\n", recvCount)
+func (bencher *Bencher) receiveMessages() {
+	for i := 0; i < bencher.payloadCount; i++ {
+		ctx := context.Background()
+		// Receive next message
+		msg, err := bencher.inboxReceiver.Receive(ctx)
+		if err != nil {
+			log.Fatal("Reading message from AMQP:", err)
 		}
-	}()
-	senderWg.Wait()
-	receiverWg.Wait()
-	timeEnd := time.Now()
-	duration := timeEnd.Sub(timeStart)
-	log.Printf("Started at : %s\n", timeStart.String())
-	log.Printf("Ended at   : %s\n", timeEnd.String())
-	log.Printf("Duration   : %s\n", duration.String())
-	log.Printf("Throughput : %f msgs/s\n", float64(*payloadCount)/duration.Seconds())
-	log.Printf("Msg size   : %d bytes\n", *payloadSize)
+
+		// Accept message
+		err = bencher.inboxReceiver.AcceptMessage(ctx, msg)
+		if err != nil {
+			log.Fatal("Accepting message from AMQP:", err)
+		}
+		bencher.receiverWg.Done()
+		log.Printf("received %d\n", i)
+	}
+}
+
+func (bencher *Bencher) receiveAcks() {
+	for i := 0; i < bencher.payloadCount; i++ {
+		ctx := context.Background()
+		// Receive next message
+		msg, err := bencher.inboxReceiver.Receive(ctx)
+		if err != nil {
+			log.Fatal("Reading message from AMQP:", err)
+		}
+
+		// Accept message
+		err = bencher.inboxReceiver.AcceptMessage(ctx, msg)
+		if err != nil {
+			log.Fatal("Accepting message from AMQP:", err)
+		}
+		bencher.receiverWg.Done()
+		log.Printf("received %d\n", i)
+	}
+}
+
+func (bencher *Bencher) printBenchResults() {
+	duration := bencher.timeEnd.Sub(bencher.timeStart)
+	log.Printf("Started at       : %s\n", bencher.timeStart.String())
+	log.Printf("Ended at         : %s\n", bencher.timeEnd.String())
+	log.Printf("Duration         : %s\n", duration.String())
+	log.Printf("Msg size         : %d bytes\n", bencher.payloadSize)
+	log.Printf("Msg Throughput   : %f msgs/s\n", float64(bencher.payloadCount)/duration.Seconds())
+	log.Printf("Data Throughput  : %f mb/s (estimated)\n", float64(bencher.payloadCount)/duration.Seconds()*float64(bencher.payloadSize)/1000000)
+	log.Printf("Msg transit time : %d s (avg)\n", -1)
+}
+
+func (bencher *Bencher) close() {
+	if bencher.outboxClient != nil {
+		bencher.outboxClient.Close()
+	}
+	if bencher.outboxSender != nil {
+		bencher.outboxSender.Close(context.Background())
+	}
+
+	if bencher.inboxClient != nil {
+		bencher.inboxClient.Close()
+	}
+	if bencher.inboxReceiver != nil {
+		bencher.inboxReceiver.Close(context.Background())
+	}
 }
 
 func fillPayloadWithData(data []byte) {
