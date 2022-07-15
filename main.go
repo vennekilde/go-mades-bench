@@ -9,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sort"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -49,7 +50,7 @@ type Bencher struct {
 	timeStart    time.Time
 	timeEnd      time.Time
 	counter      int32
-	messageStats map[string]MessageStats
+	messageStats map[string]*MessageStats
 }
 
 type MessageStats struct {
@@ -87,6 +88,7 @@ func main() {
 	bencher.prepareOutbox()
 	bencher.prepareInbox()
 	bencher.cleanInbox()
+	bencher.cleanOutbox()
 	bencher.startBenching()
 	bencher.printBenchResults()
 }
@@ -180,10 +182,25 @@ func (bencher *Bencher) cleanInbox() {
 	}
 }
 
+func (bencher *Bencher) cleanOutbox() {
+	// Drain  outbox reply before testing
+	log.Println("Cleaning outbox reply before commencing test...")
+	for {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
+		msg, err := bencher.outboxAckReceiver.Receive(ctx)
+		cancel()
+		if err != nil {
+			break
+		}
+		bencher.inboxReceiver.AcceptMessage(context.Background(), msg)
+	}
+}
+
 func (bencher *Bencher) startBenching() {
 	bencher.counter = int32(bencher.payloadCount)
 	bencher.timeStart = time.Now()
 	bencher.receiverWg.Add(bencher.payloadCount)
+	bencher.messageStats = map[string]*MessageStats{}
 
 	log.Printf("Starting %s\n", bencher.timeStart.String())
 
@@ -198,9 +215,10 @@ func (bencher *Bencher) startBenching() {
 
 func (bencher *Bencher) sendMessages() {
 	for k := 0; k < bencher.goroutines; k++ {
+		workerID := k
 		bencher.senderWg.Add(1)
 		go func() {
-			log.Printf("starting outbox worker #%d\n", k)
+			log.Printf("starting outbox worker #%d\n", workerID)
 			defer bencher.senderWg.Done()
 
 			for atomic.AddInt32(&bencher.counter, -1) >= 0 {
@@ -230,12 +248,12 @@ func (bencher *Bencher) sendMessages() {
 				cancel()
 
 				bencher.m.Lock()
-				bencher.messageStats[correlationID] = MessageStats{
+				bencher.messageStats[correlationID] = &MessageStats{
 					timeSent: time.Now(),
 				}
 				bencher.m.Unlock()
 			}
-			log.Printf("outbox worker #%d completed\n", k)
+			log.Printf("outbox worker #%d completed\n", workerID)
 		}()
 	}
 }
@@ -248,22 +266,59 @@ func (bencher *Bencher) receiveMessages() {
 		if err != nil {
 			log.Fatal("Reading message from AMQP:", err)
 		}
+		correlationID := msg.Properties.CorrelationID.(string)
 
 		// Accept message
 		err = bencher.inboxReceiver.AcceptMessage(ctx, msg)
 		if err != nil {
 			log.Fatal("Accepting message from AMQP:", err)
 		}
+
+		bencher.m.Lock()
+		stats, ok := bencher.messageStats[correlationID]
+		if ok {
+			stats.timeReceived = time.Now()
+		}
+		bencher.m.Unlock()
+
 		bencher.receiverWg.Done()
 		log.Printf("received %d\n", i)
 	}
 }
 
+func (bencher *Bencher) calcFlightTime() (avg time.Duration, median time.Duration) {
+	var total time.Duration
+	flightTimes := make([]time.Duration, 0, bencher.payloadCount)
+	for key, val := range bencher.messageStats {
+		if val.timeReceived.IsZero() {
+			log.Printf("never received ack for msg: %s", key)
+			continue
+		}
+		flightTime := val.timeReceived.Sub(val.timeSent)
+		flightTimes = append(flightTimes, flightTime)
+		total += flightTime
+	}
+	count := len(flightTimes)
+	// Avg
+	avg = total / time.Duration(count)
+
+	// Median
+	sort.Slice(flightTimes, func(i, j int) bool { return flightTimes[i] < flightTimes[j] })
+	mNumber := count / 2
+	if count%2 != 0 {
+		median = flightTimes[mNumber]
+	} else {
+		median = (flightTimes[mNumber-1] + flightTimes[mNumber]) / 2
+	}
+
+	return avg, median
+}
+
 func (bencher *Bencher) receiveAcks() {
-	for i := 0; i < bencher.payloadCount; i++ {
+	/*for i := 0; i < bencher.payloadCount; i++ {
 		ctx := context.Background()
 		// Receive next message
-		msg, err := bencher.inboxReceiver.Receive(ctx)
+		msg, err := bencher.outboxAckReceiver.Receive(ctx)
 		if err != nil {
 			log.Fatal("Reading message from AMQP:", err)
 		}
@@ -275,18 +330,21 @@ func (bencher *Bencher) receiveAcks() {
 		}
 		bencher.receiverWg.Done()
 		log.Printf("received %d\n", i)
-	}
+	}*/
 }
 
 func (bencher *Bencher) printBenchResults() {
 	duration := bencher.timeEnd.Sub(bencher.timeStart)
+	avgFlightTime, medianFlightTime := bencher.calcFlightTime()
 	log.Printf("Started at       : %s\n", bencher.timeStart.String())
 	log.Printf("Ended at         : %s\n", bencher.timeEnd.String())
 	log.Printf("Duration         : %s\n", duration.String())
+	log.Printf("Msg count        : %d \n", bencher.payloadCount)
 	log.Printf("Msg size         : %d bytes\n", bencher.payloadSize)
 	log.Printf("Msg Throughput   : %f msgs/s\n", float64(bencher.payloadCount)/duration.Seconds())
 	log.Printf("Data Throughput  : %f mb/s (estimated)\n", float64(bencher.payloadCount)/duration.Seconds()*float64(bencher.payloadSize)/1000000)
-	log.Printf("Msg transit time : %d s (avg)\n", -1)
+	log.Printf("Msg transit time : %s (avg)\n", avgFlightTime.String())
+	log.Printf("Msg transit time : %s (median)\n", medianFlightTime.String())
 }
 
 func (bencher *Bencher) close() {
