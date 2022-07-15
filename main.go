@@ -58,23 +58,24 @@ type MessageStats struct {
 }
 
 func main() {
-	bencher := Bencher{
-		payloadSize:      *flag.Int("size", 1000000, "Incompressible payload size to generate"), //1000000 = 1mb,
-		payloadCount:     *flag.Int("n", 10000, "Number of messages to send"),
-		maxInTransit:     *flag.Int("max-in-transit", -1, "Max messages allowed in transit. max-in-transit < 0 means unlimited"),
-		receiverCode:     *flag.String("receiver", "TEST-CODE", "Receiver Component Code"),
-		messageType:      *flag.String("message-type", "TEST-MESSAGE", "Message type to send messages with"),
-		goroutines:       *flag.Int("goroutines", runtime.NumCPU(), "Number of go routines to use when sending"),
-		outboxReply:      *flag.String("outbox-reply", "ecp.endpoint.outbox.reply", "outbox reply queue"),
-		outbox:           *flag.String("outbox", "ecp.endpoint.outbox", "outbox queue"),
-		outboxSocketAddr: *flag.String("outbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker"),
-		outboxAmqpUser:   *flag.String("outbox-user", "admin", "Outbox broker username"),
-		outboxAmqpPass:   *flag.String("outbox-pass", "password", "Outbox broker password"),
-		inbox:            *flag.String("inbox", "ecp.endpoint.inbox", "inbox queue"),
-		inboxSocketAddr:  *flag.String("inbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker"),
-		inboxAmqpUser:    *flag.String("inbox-user", "admin", "Inbox broker password"),
-		inboxAmqpPass:    *flag.String("inbox-pass", "password", "Inbox broker username"),
-	}
+	bencher := Bencher{}
+	flag.IntVar(&bencher.payloadSize, "size", 1000000, "Incompressible payload size to generate") //1000000 = 1mb,
+	flag.IntVar(&bencher.payloadCount, "n", 10000, "Number of messages to send")
+	flag.IntVar(&bencher.maxInTransit, "max-in-transit", -1, "Max messages allowed in transit. max-in-transit < 0 means unlimited")
+	flag.IntVar(&bencher.goroutines, "goroutines", runtime.NumCPU(), "Number of go routines to use when sending")
+	flag.StringVar(&bencher.receiverCode, "receiver", "TEST-CODE", "Receiver Component Code")
+	flag.StringVar(&bencher.messageType, "message-type", "TEST-MESSAGE", "Message type to send messages with")
+
+	flag.StringVar(&bencher.outboxReply, "outbox-reply", "ecp.endpoint.outbox.reply", "outbox reply queue")
+	flag.StringVar(&bencher.outbox, "outbox", "ecp.endpoint.outbox", "outbox queue")
+	flag.StringVar(&bencher.outboxSocketAddr, "outbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
+	flag.StringVar(&bencher.outboxAmqpUser, "outbox-user", "admin", "Outbox broker username")
+	flag.StringVar(&bencher.outboxAmqpPass, "outbox-pass", "password", "Outbox broker password")
+
+	flag.StringVar(&bencher.inbox, "inbox", "ecp.endpoint.inbox", "inbox queue")
+	flag.StringVar(&bencher.inboxSocketAddr, "inbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
+	flag.StringVar(&bencher.inboxAmqpUser, "inbox-user", "admin", "Inbox broker password")
+	flag.StringVar(&bencher.inboxAmqpPass, "inbox-pass", "password", "Inbox broker username")
 
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage of %s:\n", os.Args[0])
