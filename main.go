@@ -47,17 +47,17 @@ type Bencher struct {
 	inboxClient     *amqp.Client
 	inboxReceiver   *amqp.Receiver
 
-	senderWg        sync.WaitGroup
-	receiverWg      sync.WaitGroup
-	timeStart       time.Time
-	timeEnd         time.Time
-	messagesToSend  chan int32
-	counter         int32
-	receivedCounter int32
-	messageStats    map[string]*MessageStats
+	senderWg       sync.WaitGroup
+	receiverWg     sync.WaitGroup
+	timeStart      time.Time
+	timeEnd        time.Time
+	messagesToSend chan int32
+	counter        int32
+	messageStats   map[string]*MessageStats
 }
 
 type MessageStats struct {
+	ID                 int32
 	timeCreated        time.Time
 	timeAccepted       time.Time
 	timeReceived       time.Time
@@ -290,10 +290,11 @@ func (bencher *Bencher) sendMessages() {
 
 				bencher.m.Lock()
 				bencher.messageStats[correlationID] = &MessageStats{
+					ID:          n,
 					timeCreated: time.Now(),
 				}
 				bencher.m.Unlock()
-				log.Printf("sent %d\n", n)
+				log.Printf("created %d\n", n)
 			}
 		}()
 	}
@@ -336,6 +337,7 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 				bencher.messageStats[messageID] = msgStats
 			}
 			if stats != nil {
+				msgStats.ID = stats.ID
 				msgStats.timeCreated = stats.timeCreated
 				msgStats.timeAccepted = stats.timeAccepted
 				delete(bencher.messageStats, correlationID)
@@ -353,12 +355,15 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 	switch queue {
 	case bencher.outboxReply:
 		stats.timeAccepted = time.Now()
+		log.Printf("sent %d\n", stats.ID)
 	case bencher.inbox:
 		stats.timeReceived = time.Now()
+		log.Printf("received %d\n", stats.ID)
 	case bencher.sendEvent:
 		switch msg.Value.(string) {
 		case "DELIVERED":
 			stats.timeDeliveredEvent = time.Now()
+			log.Printf("delivered ack %d\n", stats.ID)
 		case "RECEIVED":
 			if !stats.timeReceivedEvent.IsZero() {
 				log.Printf("message %s is already received\n", messageID)
@@ -366,9 +371,8 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 			}
 			stats.timeReceivedEvent = time.Now()
 			bencher.receiverWg.Done()
-			n := atomic.AddInt32(&bencher.receivedCounter, 1)
-			log.Printf("received %d\n", n)
 			bencher.messagesToSend <- int32(bencher.payloadCount) - bencher.counter
+			log.Printf("received ack %d\n", stats.ID)
 		default:
 			log.Printf("unknown send event value: %s\n", msg.Value)
 		}
