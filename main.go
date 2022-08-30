@@ -89,12 +89,12 @@ func main() {
 	flag.StringVar(&bencher.outboxReply, "outbox-reply", "ecp.endpoint.outbox.reply", "outbox reply queue")
 	flag.StringVar(&bencher.outbox, "outbox", "ecp.endpoint.outbox", "outbox queue")
 	flag.StringVar(&bencher.outboxSocketAddr, "outbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
-	flag.StringVar(&bencher.outboxAmqpUser, "outbox-user", "admin", "Outbox broker username")
+	flag.StringVar(&bencher.outboxAmqpUser, "outbox-user", "endpoint", "Outbox broker username")
 	flag.StringVar(&bencher.outboxAmqpPass, "outbox-pass", "password", "Outbox broker password")
 
 	flag.StringVar(&bencher.inbox, "inbox", "ecp.endpoint.inbox", "inbox queue")
 	flag.StringVar(&bencher.inboxSocketAddr, "inbox-addr", "amqp://localhost:5672", "Socket address to reach the internal broker")
-	flag.StringVar(&bencher.inboxAmqpUser, "inbox-user", "admin", "Inbox broker password")
+	flag.StringVar(&bencher.inboxAmqpUser, "inbox-user", "endpoint", "Inbox broker password")
 	flag.StringVar(&bencher.inboxAmqpPass, "inbox-pass", "password", "Inbox broker username")
 
 	flag.Usage = func() {
