@@ -82,7 +82,7 @@ func main() {
 	flag.IntVar(&bencher.payloadCount, "n", 10000, "Number of messages to send")
 	flag.IntVar(&bencher.maxInTransit, "max-in-transit", 0, "Max messages allowed in transit. max-in-transit <= 0 means unlimited")
 	flag.IntVar(&bencher.goroutines, "goroutines", runtime.NumCPU(), "Number of go routines to use when sending")
-	flag.StringVar(&bencher.receiverCode, "receiver", "TEST-CODE", "Receiver Component Code")
+	flag.StringVar(&bencher.receiverCode, "receiver", "ecp-endpoint", "Receiver Component Code")
 	flag.StringVar(&bencher.messageType, "message-type", "TEST-MESSAGE", "Message type to send messages with")
 
 	flag.StringVar(&bencher.sendEvent, "send-event", "ecp.endpoint.send.event", "send event queue")
