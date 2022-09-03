@@ -37,12 +37,12 @@ Usage of ./go-mades-bench:
         Outbox broker password (default "password")
   -outbox-reply string
         outbox reply queue (default "ecp.endpoint.outbox.reply")
+  -outbox-send-event string
+        send event queue (default "ecp.endpoint.send.event")
   -outbox-user string
         Outbox broker username (default "endpoint")
   -receiver string
         Receiver Component Code (default "ecp-endpoint")
-  -send-event string
-        send event queue (default "ecp.endpoint.send.event")
   -size int
         Incompressible payload size to generate (default 1000000)
 ```
@@ -61,5 +61,5 @@ Usage of ./go-mades-bench:
 2022/08/30 11:15:30 Data Throughput  : 0.009032 mb/s (estimated)
 2022/08/30 11:15:30 Msg transit time : 23.918915777s (avg) 23.447003503s (median) for Received
 2022/08/30 11:15:30 Msg transit time : 44.564976534s (avg) 51.256929606s (median) for Delivery Event
-2022/08/30 11:15:30 Msg transit time : 44.692382424s (avg) 51.326928701s (median) fpr Received Event
+2022/08/30 11:15:30 Msg transit time : 44.692382424s (avg) 51.326928701s (median) for Received Event
 ```
