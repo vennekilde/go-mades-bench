@@ -242,6 +242,9 @@ func (bencher *Bencher) cleanQueue(wg *sync.WaitGroup, receiver *amqp.Receiver) 
 		}
 		receiver.AcceptMessage(context.Background(), msg)
 		i++
+		if i%100 == 0 {
+			log.Printf("Cleaned %d messages from queue %s so far\n", i, receiver.Address())
+		}
 	}
 	log.Printf("Cleaned %d messages from queue %s\n", i, receiver.Address())
 	wg.Done()
@@ -263,7 +266,6 @@ func (bencher *Bencher) startBenching() {
 	go bencher.receiveMessages(bencher.sendEventReceiver)
 
 	go func() {
-		time.Sleep(time.Second * 2)
 		for i := 1; bencher.timeEndReceiveEvent.IsZero(); i++ {
 			bencher.m.Lock()
 			log.Printf("Intermediate Report #%d\n", i)
