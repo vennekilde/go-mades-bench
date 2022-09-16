@@ -627,8 +627,8 @@ func (bencher *Bencher) printBenchResults(printMissing bool) {
 		bencher.receivedEventCounter,
 		bencher.payloadCount,
 		receivedEventDuration.Round(time.Millisecond),
-		flightTimes.Received.Average.Seconds(),
-		flightTimes.Received.Median.Seconds(),
+		flightTimes.ReceivedEvent.Average.Seconds(),
+		flightTimes.ReceivedEvent.Median.Seconds(),
 	)
 
 	log.Printf("==============================================================================")
