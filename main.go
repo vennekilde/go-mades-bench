@@ -318,9 +318,9 @@ func (bencher *Bencher) sendMessages() {
 					m.Unlock()
 					break
 				}
-				m.Unlock()
 				n := <-bencher.messagesToSend
 				_ = atomic.AddUint64(&bencher.outboxCounter, 1)
+				m.Unlock()
 
 				payload := make([]byte, bencher.payloadSize)
 				fillPayloadWithData(payload)
