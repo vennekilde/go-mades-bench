@@ -560,20 +560,28 @@ func (bencher *Bencher) printBenchResults(printMissing bool) {
 func (bencher *Bencher) close() {
 	if bencher.outboxClient != nil {
 		err := bencher.outboxClient.Close()
-		log.Printf("unable to close outbox receiver amqp connection. err: %s\n", err.Error())
+		if err != nil {
+			log.Printf("unable to close outbox receiver amqp connection. err: %s\n", err.Error())
+		}
 	}
 	if bencher.outboxSender != nil {
 		err := bencher.outboxSender.Close(context.Background())
-		log.Printf("unable to close outbox sender amqp connection. err: %s\n", err.Error())
+		if err != nil {
+			log.Printf("unable to close outbox sender amqp connection. err: %s\n", err.Error())
+		}
 	}
 
 	if bencher.inboxClient != nil {
 		err := bencher.inboxClient.Close()
-		log.Printf("unable to close inbox sender amqp connection. err: %s\n", err.Error())
+		if err != nil {
+			log.Printf("unable to close inbox sender amqp connection. err: %s\n", err.Error())
+		}
 	}
 	if bencher.inboxReceiver != nil {
 		err := bencher.inboxReceiver.Close(context.Background())
-		log.Printf("unable to close inbox receiver amqp connection. err: %s\n", err.Error())
+		if err != nil {
+			log.Printf("unable to close inbox receiver amqp connection. err: %s\n", err.Error())
+		}
 	}
 }
 
