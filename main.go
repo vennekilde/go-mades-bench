@@ -54,12 +54,13 @@ func main() {
 	bencher.startBenching()
 
 	log.Printf("\n")
-	log.Printf("Final Report\n")
-	bencher.printBenchResults(true)
-
+	log.Print("Ran with flags: ")
 	// Print used flags
 	flag.VisitAll(func(f *flag.Flag) {
 		fmt.Printf("-%s=%s ", f.Name, f.Value)
 	})
+
 	fmt.Print("\n")
+	log.Printf("Final Report\n")
+	bencher.printBenchResults(true)
 }
