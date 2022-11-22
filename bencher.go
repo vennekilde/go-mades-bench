@@ -109,6 +109,7 @@ func (bencher *Bencher) prepareOutbox() {
 		amqp.ConnSASLPlain(bencher.outboxAmqpUser, bencher.outboxAmqpPass),
 	}
 	if strings.HasPrefix(bencher.outboxSocketAddr, "amqps://") {
+		// #nosec G402 - Ignore InsecureSkipVerify: true. This is a benchmark tool, no need to enforce strict security checking
 		outboxClientOpts = append(outboxClientOpts, amqp.ConnTLSConfig(&tls.Config{
 			InsecureSkipVerify: true,
 		}))
@@ -162,6 +163,7 @@ func (bencher *Bencher) prepareInbox() {
 		amqp.ConnSASLPlain(bencher.inboxAmqpUser, bencher.inboxAmqpPass),
 	}
 	if strings.HasPrefix(bencher.inboxSocketAddr, "amqps://") {
+		// #nosec G402 - Ignore InsecureSkipVerify: true. This is a benchmark tool, no need to enforce strict security checking
 		inboxClientOpts = append(inboxClientOpts, amqp.ConnTLSConfig(&tls.Config{
 			InsecureSkipVerify: true,
 		}))
@@ -557,21 +559,27 @@ func (bencher *Bencher) printBenchResults(printMissing bool) {
 
 func (bencher *Bencher) close() {
 	if bencher.outboxClient != nil {
-		bencher.outboxClient.Close()
+		err := bencher.outboxClient.Close()
+		log.Printf("unable to close outbox receiver amqp connection. err: %s\n", err.Error())
 	}
 	if bencher.outboxSender != nil {
-		bencher.outboxSender.Close(context.Background())
+		err := bencher.outboxSender.Close(context.Background())
+		log.Printf("unable to close outbox sender amqp connection. err: %s\n", err.Error())
 	}
 
 	if bencher.inboxClient != nil {
-		bencher.inboxClient.Close()
+		err := bencher.inboxClient.Close()
+		log.Printf("unable to close inbox sender amqp connection. err: %s\n", err.Error())
 	}
 	if bencher.inboxReceiver != nil {
-		bencher.inboxReceiver.Close(context.Background())
+		err := bencher.inboxReceiver.Close(context.Background())
+		log.Printf("unable to close inbox receiver amqp connection. err: %s\n", err.Error())
 	}
 }
 
 func fillPayloadWithData(data []byte) {
+	// #nosec G404 - Intentionally using weak random number generator math/rand, as this is only for random payload data
+	// No need to waste cpu time with crypto/rand
 	_, err := rand.Read(data)
 	if err != nil {
 		log.Fatal("Creating pseudo random payload:", err)
