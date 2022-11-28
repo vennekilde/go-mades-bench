@@ -30,7 +30,7 @@ make build_windows
 
 Usage of go-mades-bench:
   -goroutines uint
-        Number of go routines to use when sending (default 24)
+        Number of go routines to use when sending (default "number of CPU vCores")
   -inbox string
         inbox queue (default "ecp.endpoint.inbox")
   -inbox-addr string
@@ -88,11 +88,11 @@ Benchmark example where 10000 messages are sent with a size of 3kb
 2022/11/22 11:42:26 ==============================================================================
 ```
 
-## Example with 100000000 messages
+## Example with 100 million messages
 
-Example of final report after sending 100000000 messages with a size of 3kb and a maximum of 5000 messages allowed to be unacknowledged to prevent flooding the internal broker, as the benchmark can push messages way faster, than the endpoint can process them.
+Example of final report after sending 100 million messages with a size of 3kb and a maximum of 5000 messages allowed to be unacknowledged to prevent flooding the internal broker, as the benchmark can push messages way faster, than the endpoint can process them.
 
-Note: this test was done using a custom implementation of MADES/ECP, as sending 100000000 messages using ECP, would take months and careful tuning to even succeed in running to completion.
+Note: this test was done using a custom implementation of MADES/ECP, as sending 100 million messages using ECP, would take months and careful tuning to even succeed in running to completion.
 
 ``` log
 > go-mades-bench -n=100000000 -size=3000 -max-in-transit=5000 -receiver=ecp-endpoint
