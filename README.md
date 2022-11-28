@@ -2,6 +2,14 @@
 
 This is a benchmark tool for testing message throughput for applications implementing the ECP variant of the MADES Communication Standard
 
+## Installation
+
+Install using `go install` or download source code and build it on your machine by following the `Building` section
+
+```bash
+go install github.com/vennekilde/go-mades-bench@latest
+```
+
 ## Building
 
 ``` bash
@@ -18,7 +26,7 @@ make build_windows
 ## Usage
 
 ```
-> ./go-mades-bench -h
+> go-mades-bench -h
 
 Usage of go-mades-bench:
   -goroutines uint
@@ -61,7 +69,7 @@ Usage of go-mades-bench:
 Benchmark example where 10000 messages are sent with a size of 3kb
 
 ``` log
-./go-mades-bench -n=10000 -size=3000 -receiver=ecp-endpoint
+> go-mades-bench -n=10000 -size=3000 -receiver=ecp-endpoint
 
 ...
 2022/11/22 11:42:26 Final Report
@@ -87,7 +95,7 @@ Example of final report after sending 100000000 messages with a size of 3kb and 
 Note: this test was done using a custom implementation of MADES/ECP, as sending 100000000 messages using ECP, would take months and careful tuning to even succeed in running to completion.
 
 ``` log
-./go-mades-bench -n=100000000 -size=3000 -max-in-transit=5000 -receiver=ecp-endpoint
+> go-mades-bench -n=100000000 -size=3000 -max-in-transit=5000 -receiver=ecp-endpoint
 
 ...
 2022/11/22 09:59:40 Final Report
