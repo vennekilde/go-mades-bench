@@ -50,7 +50,7 @@ func main() {
 	defer bencher.close()
 	bencher.prepareOutbox()
 	bencher.prepareInbox()
-	bencher.cleanQueues()
+	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver)
 	bencher.startBenching()
 
 	log.Printf("\n")
