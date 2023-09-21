@@ -28,7 +28,7 @@ func cleanQueue(wg *sync.WaitGroup, receiver *amqp.Receiver) {
 	var i uint64
 	for {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second*3)
-		msg, err := receiver.Receive(ctx)
+		msg, err := receiver.Receive(ctx, nil)
 		cancel()
 		if err != nil {
 			break

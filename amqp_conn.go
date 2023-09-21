@@ -21,32 +21,33 @@ type AMQPConnOpts struct {
 }
 
 type AMQPConn struct {
-	client    *amqp.Client
+	conn      *amqp.Conn
 	senders   []*amqp.Sender
 	receivers []*amqp.Receiver
 }
 
 func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
+	ctx := context.Background()
 	conn = &AMQPConn{}
 
 	// Create outboxClient
-	clientOpts := []amqp.ConnOption{
-		amqp.ConnSASLPlain(opts.username, opts.password),
+	connOpts := amqp.ConnOptions{
+		SASLType: amqp.SASLTypePlain(opts.username, opts.password),
 	}
 	if strings.HasPrefix(opts.socketAddr, "amqps://") {
 		// #nosec G402 - Ignore InsecureSkipVerify: true. This is a benchmark tool, no need to enforce strict security checking
-		clientOpts = append(clientOpts, amqp.ConnTLSConfig(&tls.Config{
+		connOpts.TLSConfig = &tls.Config{
 			InsecureSkipVerify: true,
-		}))
+		}
 	}
 
-	conn.client, err = amqp.Dial(opts.socketAddr, clientOpts...)
+	conn.conn, err = amqp.Dial(ctx, opts.socketAddr, &connOpts)
 	if err != nil {
 		return nil, fmt.Errorf("Dialing AMQP server: %w", err)
 	}
 
 	if len(opts.sendQueues) > 0 {
-		sendSession, err := conn.client.NewSession()
+		sendSession, err := conn.conn.NewSession(context.Background(), &amqp.SessionOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("Creating AMQP sender session: %w", err)
 		}
@@ -54,7 +55,12 @@ func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
 		for _, queue := range opts.sendQueues {
 			// Create outbox sender
 			sender, err := sendSession.NewSender(
-				amqp.LinkTargetAddress(queue),
+				context.Background(),
+				queue,
+				&amqp.SenderOptions{
+					Durability:       amqp.DurabilityUnsettledState,
+					TargetDurability: amqp.DurabilityUnsettledState,
+				},
 			)
 			if err != nil {
 				return nil, fmt.Errorf("Creating sender link: %w", err)
@@ -64,7 +70,7 @@ func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
 	}
 
 	if len(opts.recvQueues) > 0 {
-		recvSession, err := conn.client.NewSession()
+		recvSession, err := conn.conn.NewSession(context.Background(), &amqp.SessionOptions{})
 		if err != nil {
 			return nil, fmt.Errorf("Creating AMQP outbox receive session: %w", err)
 		}
@@ -72,8 +78,13 @@ func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
 		for _, queue := range opts.recvQueues {
 			// Create outbox reply receiver
 			receiver, err := recvSession.NewReceiver(
-				amqp.LinkSourceAddress(queue),
-				amqp.LinkCredit(10),
+				context.Background(),
+				queue,
+				&amqp.ReceiverOptions{
+					Credit:           1000,
+					Durability:       amqp.DurabilityUnsettledState,
+					SourceDurability: amqp.DurabilityUnsettledState,
+				},
 			)
 			if err != nil {
 				return nil, fmt.Errorf("Creating receiver link: %w", err)
@@ -99,5 +110,5 @@ func (conn *AMQPConn) Close() error {
 		}
 	}
 
-	return conn.client.Close()
+	return conn.conn.Close()
 }
