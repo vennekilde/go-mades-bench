@@ -5,33 +5,29 @@ import (
 	"time"
 )
 
-type FlightTimeStatistics struct {
-	Outbox        FlightTimeStats
-	Sent          FlightTimeStats
-	DeliveryEvent FlightTimeStats
-	ReceivedEvent FlightTimeStats
-	Received      FlightTimeStats
-}
-
-func (f *FlightTimeStatistics) calcMedians() {
-	//f.Outbox.calcMedian()
-	f.Sent.calcMedian()
-	f.DeliveryEvent.calcMedian()
-	f.ReceivedEvent.calcMedian()
-	f.Received.calcMedian()
-}
-
 type FlightTimeStats struct {
 	m       sync.Mutex
-	buckets SortedMap[int64, int64]
-	count   int64
+	buckets SortedMap[uint64, uint64]
+	count   uint64
 	Average time.Duration
 	Median  time.Duration
 }
 
+func NewFlightTimeStats() FlightTimeStats {
+	return FlightTimeStats{
+		buckets: NewSortedMap[uint64, uint64](),
+	}
+}
+
+func (f *FlightTimeStats) Count() uint64 {
+	f.m.Lock()
+	defer f.m.Unlock()
+	return f.count
+}
+
 func (f *FlightTimeStats) Add(duration time.Duration) {
 	// Add to bucket for fast median calculation
-	durAsInt := duration.Milliseconds()
+	durAsInt := uint64(duration.Milliseconds())
 	f.m.Lock()
 	defer f.m.Unlock()
 	val := f.buckets.m[durAsInt]
@@ -46,7 +42,7 @@ func (f *FlightTimeStats) calcMedian() {
 	f.m.Lock()
 	defer f.m.Unlock()
 	middle := f.count / 2
-	var count int64
+	var count uint64
 	node := f.buckets.keys
 	for node != nil {
 		count += f.buckets.m[node.value]

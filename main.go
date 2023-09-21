@@ -9,9 +9,14 @@ import (
 	"os/signal"
 	"runtime"
 	"syscall"
+
+	"go.uber.org/zap"
 )
 
 func main() {
+	logger, _ := zap.NewDevelopment()
+	zap.ReplaceGlobals(logger)
+
 	bencher := NewBencher()
 
 	// Usage cli
@@ -56,6 +61,8 @@ func main() {
 	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver, bencher.outboxConn.receivers[2])
 	bencher.outboxConn.receivers[2].Close(context.Background())
 
+	bencher.ConfigureForEndpoint()
+
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
 
@@ -73,7 +80,7 @@ func main() {
 		fmt.Println("Received Termination Signal")
 	}
 
-	bencher.printMissing()
+	//bencher.printMissing()
 
 	log.Printf("\n")
 	log.Print("Ran with flags: ")
@@ -84,5 +91,5 @@ func main() {
 
 	fmt.Print("\n")
 	log.Printf("Final Report\n")
-	bencher.printBenchResults()
+	bencher.tracker.BenchResults(os.Stdout)
 }
