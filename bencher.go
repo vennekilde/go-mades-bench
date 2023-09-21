@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"math/rand"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -93,7 +94,7 @@ type Bencher struct {
 
 	// Sending a message ID to this channel, will result
 	// in a message with that BA message ID being sent
-	sendMsgIDChan chan uint64
+	sendMsgIDChan chan struct{}
 }
 
 func NewBencher() *Bencher {
@@ -127,7 +128,7 @@ func (bencher *Bencher) prepareOutbox() {
 	bencher.outboxConn, err = newAMQPConn(&AMQPConnOpts{
 		socketAddr: bencher.outboxSocketAddr,
 		sendQueues: []string{bencher.outbox},
-		recvQueues: []string{bencher.outboxReply, bencher.sendEvent},
+		recvQueues: []string{bencher.outboxReply, bencher.sendEvent, bencher.outbox},
 		username:   bencher.outboxAmqpUser,
 		password:   bencher.outboxAmqpPass,
 	})
@@ -207,9 +208,9 @@ func (bencher *Bencher) sendMessages() {
 	if bencher.maxInTransit > 0 {
 		initialMessagesToSend = bencher.maxInTransit
 	}
-	bencher.sendMsgIDChan = make(chan uint64, initialMessagesToSend)
+	bencher.sendMsgIDChan = make(chan struct{}, initialMessagesToSend)
 	for i := uint64(1); i <= initialMessagesToSend; i++ {
-		bencher.sendMsgIDChan <- i
+		bencher.sendMsgIDChan <- struct{}{}
 	}
 	var m sync.Mutex
 	for k := uint64(0); k < bencher.goroutines; k++ {
@@ -227,14 +228,14 @@ func (bencher *Bencher) sendMessages() {
 					break
 				}
 				n := <-bencher.sendMsgIDChan
-				_ = atomic.AddUint64(&bencher.outboxCounter, 1)
+				id := atomic.AddUint64(&bencher.outboxCounter, 1)
 				m.Unlock()
 
 				payload := make([]byte, bencher.payloadSize)
 				fillPayloadWithData(payload)
 				ctx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 				creationTime := time.Now()
-				baMessageID := fmt.Sprintf("%d-%s", n, uuid.New().String())
+				baMessageID := fmt.Sprintf("%d-%s", id, uuid.New().String())
 				msg := &amqp.Message{
 					Data: [][]byte{payload},
 					ApplicationProperties: map[string]interface{}{
@@ -254,7 +255,7 @@ func (bencher *Bencher) sendMessages() {
 				}
 				bencher.m.Lock()
 				bencher.messageStatsByBaMsgID[baMessageID] = &MessageStats{
-					ID:          int32(n),
+					ID:          int32(id),
 					timeCreated: creationTime,
 				}
 				bencher.m.Unlock()
@@ -263,7 +264,7 @@ func (bencher *Bencher) sendMessages() {
 				}
 
 				// Send message to outbox
-				err := bencher.outboxSender.Send(ctx, msg)
+				err := bencher.outboxSender.Send(ctx, msg, nil)
 				if err != nil {
 					log.Fatal("Sending message:", err)
 				}
@@ -277,7 +278,7 @@ func (bencher *Bencher) receiveMessages(receiver *amqp.Receiver) {
 	ctx := context.Background()
 	for {
 		// Receive next message
-		msg, err := receiver.Receive(ctx)
+		msg, err := receiver.Receive(ctx, nil)
 		if err != nil {
 			log.Fatal("Reading message from AMQP:", err)
 		}
@@ -373,24 +374,45 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 		}
 
 	case bencher.sendEvent:
-		switch msg.Value.(string) {
-		case "DELIVERED":
-			if !stats.timeDeliveredEvent.IsZero() {
-				log.Printf("message %s event is already delivered\n", messageID)
-				break
-			}
-			stats.timeDeliveredEvent = now
-			bencher.statistics.DeliveryEvent.Add(dur)
-			bencher.deliveryEventCounter++
-			if bencher.verbose {
-				log.Printf("####  delivered ack: %d,\t total: %d,\t msgID: %s\n", stats.ID, bencher.deliveryEventCounter, messageID)
-			}
-			bencher.deliveryEventWg.Done()
-			if bencher.deliveryEventCounter == bencher.payloadCount {
-				bencher.timeEndDeliveryEvent = now
-			}
+		if msg.Value != nil {
+			switch msg.Value.(string) {
+			case "DELIVERED":
+				if !stats.timeDeliveredEvent.IsZero() {
+					log.Printf("message %s event is already delivered\n", messageID)
+					break
+				}
+				stats.timeDeliveredEvent = now
+				bencher.statistics.DeliveryEvent.Add(dur)
+				bencher.deliveryEventCounter++
+				if bencher.verbose {
+					log.Printf("####  delivered ack: %d,\t total: %d,\t msgID: %s\n", stats.ID, bencher.deliveryEventCounter, messageID)
+				}
+				bencher.deliveryEventWg.Done()
+				if bencher.deliveryEventCounter == bencher.payloadCount {
+					bencher.timeEndDeliveryEvent = now
+				}
 
-		case "RECEIVED":
+			case "RECEIVED":
+				if !stats.timeReceivedEvent.IsZero() {
+					log.Printf("message %s event is already received\n", messageID)
+					break
+				}
+				stats.timeReceivedEvent = now
+				bencher.statistics.ReceivedEvent.Add(dur)
+				bencher.receivedEventCounter++
+				bencher.sendMsgIDChan <- struct{}{}
+				if bencher.verbose {
+					log.Printf("##### received  ack: %d,\t total: %d,\t msgID: %s\n", stats.ID, bencher.receivedEventCounter, messageID)
+				}
+				bencher.receiverEventWg.Done()
+				if bencher.receivedEventCounter == bencher.payloadCount {
+					bencher.timeEndReceiveEvent = now
+				}
+
+			default:
+				log.Printf("unknown send event value: %s\n", msg.Value)
+			}
+		} else {
 			if !stats.timeReceivedEvent.IsZero() {
 				log.Printf("message %s event is already received\n", messageID)
 				break
@@ -398,7 +420,7 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 			stats.timeReceivedEvent = now
 			bencher.statistics.ReceivedEvent.Add(dur)
 			bencher.receivedEventCounter++
-			bencher.sendMsgIDChan <- bencher.payloadCount - bencher.outboxCounter
+			bencher.sendMsgIDChan <- struct{}{}
 			if bencher.verbose {
 				log.Printf("##### received  ack: %d,\t total: %d,\t msgID: %s\n", stats.ID, bencher.receivedEventCounter, messageID)
 			}
@@ -406,9 +428,6 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 			if bencher.receivedEventCounter == bencher.payloadCount {
 				bencher.timeEndReceiveEvent = now
 			}
-
-		default:
-			log.Printf("unknown send event value: %s\n", msg.Value)
 		}
 	}
 

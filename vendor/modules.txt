@@ -1,0 +1,13 @@
+# github.com/Azure/go-amqp v1.0.2
+## explicit; go 1.18
+github.com/Azure/go-amqp
+github.com/Azure/go-amqp/internal/bitmap
+github.com/Azure/go-amqp/internal/buffer
+github.com/Azure/go-amqp/internal/debug
+github.com/Azure/go-amqp/internal/encoding
+github.com/Azure/go-amqp/internal/frames
+github.com/Azure/go-amqp/internal/queue
+github.com/Azure/go-amqp/internal/shared
+# github.com/google/uuid v1.3.0
+## explicit
+github.com/google/uuid
