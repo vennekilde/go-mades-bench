@@ -1,11 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"runtime"
+	"syscall"
 )
 
 func main() {
@@ -50,8 +53,27 @@ func main() {
 	defer bencher.close()
 	bencher.prepareOutbox()
 	bencher.prepareInbox()
-	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver)
-	bencher.startBenching()
+	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver, bencher.outboxConn.receivers[2])
+	bencher.outboxConn.receivers[2].Close(context.Background())
+
+	interrupt := make(chan os.Signal, 1)
+	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
+
+	go func() {
+		bencher.startBenching()
+		// Completed
+		interrupt <- syscall.Signal(0x0)
+	}()
+
+	killSignal := <-interrupt
+	switch killSignal {
+	case os.Interrupt:
+		fmt.Println("Received OS Interrupt")
+	case syscall.SIGTERM:
+		fmt.Println("Received Termination Signal")
+	}
+
+	bencher.printMissing()
 
 	log.Printf("\n")
 	log.Print("Ran with flags: ")
@@ -62,5 +84,5 @@ func main() {
 
 	fmt.Print("\n")
 	log.Printf("Final Report\n")
-	bencher.printBenchResults(true)
+	bencher.printBenchResults()
 }

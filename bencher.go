@@ -177,7 +177,7 @@ func (bencher *Bencher) startBenching() {
 		for i := 1; bencher.timeEndReceiveEvent.IsZero(); i++ {
 			bencher.m.Lock()
 			log.Printf("Intermediate Report #%d\n", i)
-			bencher.printBenchResults(false)
+			bencher.printBenchResults()
 			bencher.m.Unlock()
 			time.Sleep(time.Second * 2)
 		}
@@ -408,7 +408,7 @@ func (bencher *Bencher) handleMessage(msg *amqp.Message, queue string) {
 		}
 	}
 
-	// Cleanup if no linger needed
+	// Cleanup if no longer needed
 	if !stats.timeAccepted.IsZero() &&
 		!stats.timeCreated.IsZero() &&
 		!stats.timeDeliveredEvent.IsZero() &&
@@ -430,7 +430,56 @@ func (bencher *Bencher) duration(start time.Time, end time.Time) time.Duration {
 	return end.Sub(start)
 }
 
-func (bencher *Bencher) printBenchResults(printMissing bool) {
+func (bencher *Bencher) printMissing() {
+	missingEvents := make([]string, 0, 5)
+	for id, msg := range bencher.messageStatsByMsgID {
+		if msg.timeCreated.IsZero() {
+			missingEvents = append(missingEvents, "CREATED")
+		}
+		if msg.timeAccepted.IsZero() {
+			missingEvents = append(missingEvents, "ACCEPTED")
+		}
+		if msg.timeReceived.IsZero() {
+			missingEvents = append(missingEvents, "RECEIVED")
+		}
+		if msg.timeDeliveredEvent.IsZero() {
+			missingEvents = append(missingEvents, "ACK_DELIVERED")
+		}
+		if msg.timeReceivedEvent.IsZero() {
+			missingEvents = append(missingEvents, "ACK_RECEIVED")
+		}
+		if len(missingEvents) > 0 {
+			fmt.Printf("MessageID: %s missing events: [%s]\n", id, strings.Join(missingEvents, ", "))
+			// Reset array
+			missingEvents = missingEvents[:0]
+		}
+	}
+
+	for id, msg := range bencher.messageStatsByBaMsgID {
+		if msg.timeCreated.IsZero() {
+			missingEvents = append(missingEvents, "CREATED")
+		}
+		if msg.timeAccepted.IsZero() {
+			missingEvents = append(missingEvents, "ACCEPTED")
+		}
+		if msg.timeReceived.IsZero() {
+			missingEvents = append(missingEvents, "RECEIVED")
+		}
+		if msg.timeDeliveredEvent.IsZero() {
+			missingEvents = append(missingEvents, "ACK_DELIVERED")
+		}
+		if msg.timeReceivedEvent.IsZero() {
+			missingEvents = append(missingEvents, "ACK_RECEIVED")
+		}
+		if len(missingEvents) > 0 {
+			fmt.Printf("BAMessageID: %s missing events: [%s]\n", id, strings.Join(missingEvents, ", "))
+			// Reset array
+			missingEvents = missingEvents[:0]
+		}
+	}
+}
+
+func (bencher *Bencher) printBenchResults() {
 	outboxDuration := bencher.duration(bencher.timeStart, bencher.timeEndOutbox)
 	sentDuration := bencher.duration(bencher.timeStart, bencher.timeEndSent)
 	receivedDuration := bencher.duration(bencher.timeStart, bencher.timeEndReceive)
