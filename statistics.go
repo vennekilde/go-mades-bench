@@ -1,6 +1,9 @@
 package main
 
-import "time"
+import (
+	"sync"
+	"time"
+)
 
 type FlightTimeStatistics struct {
 	Outbox        FlightTimeStats
@@ -19,6 +22,7 @@ func (f *FlightTimeStatistics) calcMedians() {
 }
 
 type FlightTimeStats struct {
+	m       sync.Mutex
 	buckets SortedMap[int64, int64]
 	count   int64
 	Average time.Duration
@@ -28,6 +32,8 @@ type FlightTimeStats struct {
 func (f *FlightTimeStats) Add(duration time.Duration) {
 	// Add to bucket for fast median calculation
 	durAsInt := duration.Milliseconds()
+	f.m.Lock()
+	defer f.m.Unlock()
 	val := f.buckets.m[durAsInt]
 	f.buckets.Put(durAsInt, val+1)
 
@@ -37,6 +43,8 @@ func (f *FlightTimeStats) Add(duration time.Duration) {
 }
 
 func (f *FlightTimeStats) calcMedian() {
+	f.m.Lock()
+	defer f.m.Unlock()
 	middle := f.count / 2
 	var count int64
 	node := f.buckets.keys
