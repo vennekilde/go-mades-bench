@@ -241,6 +241,7 @@ func (bencher *Bencher) sendMessages() {
 						"receiverCode":      bencher.receiverCode,
 						"messageType":       bencher.messageType,
 						"baMessageID":       baMessageID,
+						"isTracingMessage":  false,
 						"senderApplication": "Go-MADES-Bench",
 					},
 					Properties: &amqp.MessageProperties{
