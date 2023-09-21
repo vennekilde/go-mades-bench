@@ -247,6 +247,9 @@ func (bencher *Bencher) sendMessages() {
 						CreationTime:  &creationTime,
 						CorrelationID: baMessageID,
 					},
+					Header: &amqp.MessageHeader{
+						Durable: true,
+					},
 				}
 				bencher.m.Lock()
 				bencher.messageStatsByBaMsgID[baMessageID] = &MessageStats{
