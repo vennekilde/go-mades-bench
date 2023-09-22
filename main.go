@@ -30,7 +30,7 @@ func main() {
 
 	flag.Uint64Var(&bencher.payloadSize, "size", 1000000, "Incompressible payload size to generate") //1000000 = 1mb,
 	flag.Uint64Var(&bencher.payloadCount, "n", 10000, "Number of messages to send")
-	flag.Uint64Var(&bencher.maxInTransit, "max-in-transit", 0, "Max messages allowed in transit. max-in-transit <= 0 means unlimited")
+	flag.Uint64Var(&bencher.maxInTransit, "max-in-transit", 1000, "Max messages allowed in transit. max-in-transit <= 0 means unlimited")
 	flag.Uint64Var(&bencher.goroutines, "goroutines", uint64(runtime.NumCPU()), "Number of go routines to use when sending")
 	flag.StringVar(&bencher.receiverCode, "receiver", "ecp-endpoint", "Receiver Component Code")
 	flag.StringVar(&bencher.messageType, "message-type", "TEST-MESSAGE", "Message type to send messages with")
