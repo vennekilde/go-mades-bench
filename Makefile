@@ -16,5 +16,10 @@ build_linux: export GOOS=linux
 build_linux: export GOARCH=amd64
 build_linux: .build(linux)
 
+package: build_linux image-build
+
+image-build:
+	docker build . -t github.com/vennekilde/go-mades/bench:alpine -f alpine.dockerfile
+
 scan:
 	gosec  ./... 
