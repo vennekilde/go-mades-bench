@@ -17,3 +17,5 @@
 bin/
 
 __debug_bin
+
+scripts/bench-*
