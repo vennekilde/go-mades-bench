@@ -112,7 +112,7 @@ func (s *SenderQueue) Send(id uint64) {
 	s.Queue.onMessage(0, msgIdent)
 }
 
-func CreateMadesMsgCreator(receiverCode string, messageType string) MsgCreator {
+func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bool) MsgCreator {
 	return func(id uint64, size uint64) (*amqp.Message, string, *MessageIdent) {
 		payload := make([]byte, size)
 		fillPayloadWithData(payload)
@@ -125,7 +125,7 @@ func CreateMadesMsgCreator(receiverCode string, messageType string) MsgCreator {
 				"receiverCode":      receiverCode,
 				"messageType":       messageType,
 				"baMessageID":       baMessageID,
-				"isTracingMessage":  false,
+				"isTracingMessage":  isTracing,
 				"senderApplication": "Go-MADES-Bench",
 			},
 			Properties: &amqp.MessageProperties{
@@ -234,9 +234,10 @@ func HandleMadesSendEventMessage(messageTracker *MessageTracker, msg *amqp.Messa
 		switch msg.Value.(string) {
 		case "DELIVERED":
 			return msgIdent, msgID, 0
-
 		case "RECEIVED":
 			return msgIdent, msgID, 1
+		case "TRACING":
+			return msgIdent, msgID, 0
 		default:
 			zap.L().Warn("unknown send event value",
 				zap.String("msgID", msgID),

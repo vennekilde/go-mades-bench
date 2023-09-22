@@ -9,10 +9,6 @@ import (
 	"github.com/Azure/go-amqp"
 )
 
-func cleanQueues(conn *AMQPConn) {
-	cleanReceivers(conn.receivers...)
-}
-
 func cleanReceivers(receivers ...*amqp.Receiver) {
 	wg := sync.WaitGroup{}
 	wg.Add(len(receivers))

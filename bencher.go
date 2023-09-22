@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"os"
 	"time"
@@ -35,18 +36,14 @@ type BencherFlags struct {
 type Bencher struct {
 	BencherFlags
 
-	// Outbox AMQP senders/receivers
-	outboxConn          *AMQPConn
-	outboxSender        *amqp.Sender
-	outboxReplyReceiver *amqp.Receiver
-	sendEventReceiver   *amqp.Receiver
+	outboxConnOpts *AMQPConnOpts
+	inboxConnOpts  *AMQPConnOpts
+	outboxConn     *AMQPConn
+	inboxConn      *AMQPConn
 
-	// Inbox AMQP receiver
-	inboxConn     *AMQPConn
-	inboxReceiver *amqp.Receiver
-
-	tracker *Tracker
-	queues  *Queues
+	tracker        *Tracker
+	messageTracker *MessageTracker
+	queues         *Queues
 }
 
 func NewBencher() *Bencher {
@@ -55,112 +52,274 @@ func NewBencher() *Bencher {
 
 // prepareOutbox connects the the sender endpoint broker and sets up senders for the outbox and
 // receivers for the send event and outbox reply queues
-func (bencher *Bencher) prepareOutbox() {
+func (bencher *Bencher) ConnectQueues() {
 	var err error
-	bencher.outboxConn, err = newAMQPConn(&AMQPConnOpts{
-		socketAddr: bencher.outboxSocketAddr,
-		sendQueues: []string{bencher.outbox},
-		recvQueues: []string{bencher.outboxReply, bencher.sendEvent, bencher.outbox},
-		username:   bencher.outboxAmqpUser,
-		password:   bencher.outboxAmqpPass,
-	})
+	if bencher.inboxConnOpts != nil {
+		bencher.inboxConnOpts.username = bencher.inboxAmqpUser
+		bencher.inboxConnOpts.password = bencher.inboxAmqpPass
 
-	if err != nil {
-		log.Fatal("Unable to create outbox AMQP client:", err)
+		bencher.inboxConn, err = newAMQPConn(bencher.inboxConnOpts)
+		if err != nil {
+			log.Fatal("Unable to create outbox AMQP client:", err)
+		}
 	}
 
-	bencher.outboxSender = bencher.outboxConn.senders[0]
-	bencher.outboxReplyReceiver = bencher.outboxConn.receivers[0]
-	bencher.sendEventReceiver = bencher.outboxConn.receivers[1]
-}
+	if bencher.outboxConnOpts != nil {
+		bencher.outboxConnOpts.username = bencher.outboxAmqpUser
+		bencher.outboxConnOpts.password = bencher.outboxAmqpPass
 
-// prepareOutbox connects the the receiver endpoint broker and sets up receiver for the inbox queue
-func (bencher *Bencher) prepareInbox() {
-	var err error
-	bencher.inboxConn, err = newAMQPConn(&AMQPConnOpts{
-		socketAddr: bencher.inboxSocketAddr,
-		recvQueues: []string{bencher.inbox},
-		username:   bencher.inboxAmqpUser,
-		password:   bencher.inboxAmqpPass,
-	})
-
-	if err != nil {
-		log.Fatal("Unable to create inbox AMQP client:", err)
+		bencher.outboxConn, err = newAMQPConn(bencher.outboxConnOpts)
+		if err != nil {
+			log.Fatal("Unable to create inbox AMQP client:", err)
+		}
 	}
-
-	bencher.inboxReceiver = bencher.inboxConn.receivers[0]
 }
 
-func (b *Bencher) ConfigureForEndpoint() {
+func (b *Bencher) ConfigureTracker(trackerCount int, payloadSize uint64) {
 	b.tracker = &Tracker{
-		PayloadSize: int(b.payloadSize),
-		Trackables:  make([]*Trackable, 5),
+		PayloadSize: int(payloadSize),
+		Trackables:  make([]*Trackable, trackerCount),
 	}
+}
 
+func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool) *SenderQueue {
 	sendTracker := NewTrackable()
 	sendTracker.Name = "Sent to outbox"
 	sendTracker.EstimatedEventSize = b.payloadSize
 	sendTracker.Limit = b.payloadCount
-	b.tracker.Trackables[0] = sendTracker
+	b.tracker.Trackables[trackID] = sendTracker
 
+	queue := &SenderQueue{
+		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing),
+		PayloadSize:       b.payloadSize,
+		Queue:             NewQueue(b.messageTracker, sendTracker),
+		maxUnacknowledged: b.maxInTransit,
+		sender:            b.outboxConn.senders[0],
+		senderCount:       int(b.goroutines),
+	}
+
+	return queue
+}
+
+func (b *Bencher) CreateQueueEndpointOutboxReply(trackID int) *ReceiveQueue {
 	replyTracker := NewTrackable()
 	replyTracker.Name = "Sent to broker"
 	replyTracker.EstimatedEventSize = b.payloadSize
 	replyTracker.Limit = b.payloadCount
-	b.tracker.Trackables[1] = replyTracker
+	b.tracker.Trackables[trackID] = replyTracker
 
-	inboxTracker := NewTrackable()
-	inboxTracker.Name = "Received in inbox"
-	inboxTracker.EstimatedEventSize = b.payloadSize
-	inboxTracker.Limit = b.payloadCount
-	b.tracker.Trackables[2] = inboxTracker
+	queue := &ReceiveQueue{
+		IdentifyMsg: HandleMadesReplyMessage,
+		Queue:       NewQueue(b.messageTracker, replyTracker),
+		receiver:    b.outboxConn.receivers[0],
+	}
 
+	return queue
+}
+
+func (b *Bencher) CreateQueueEndpointSendEvent(trackID int) *ReceiveQueue {
 	deliveryTracker := NewTrackable()
 	deliveryTracker.Name = "Delivery event"
 	deliveryTracker.EstimatedEventSize = 100 // Roughly
 	deliveryTracker.Limit = b.payloadCount
-	b.tracker.Trackables[3] = deliveryTracker
+	b.tracker.Trackables[trackID] = deliveryTracker
 
 	receivedTracker := NewTrackable()
 	receivedTracker.Name = "Received event"
 	receivedTracker.EstimatedEventSize = 100 // Roughly
 	receivedTracker.Limit = b.payloadCount
-	b.tracker.Trackables[4] = receivedTracker
+	b.tracker.Trackables[trackID+1] = receivedTracker
 
-	msgTracker := NewMessageTracker()
+	queue := &ReceiveQueue{
+		IdentifyMsg: HandleMadesSendEventMessage,
+		Queue:       NewQueue(b.messageTracker, deliveryTracker, receivedTracker),
+		receiver:    b.outboxConn.receivers[1],
+	}
 
+	return queue
+}
+
+func (b *Bencher) CreateQueueEndpointSendEventTracing(trackID int) *ReceiveQueue {
+	receivedTracker := NewTrackable()
+	receivedTracker.Name = "Received event"
+	receivedTracker.EstimatedEventSize = 100 // Roughly
+	receivedTracker.Limit = b.payloadCount
+	b.tracker.Trackables[trackID] = receivedTracker
+
+	queue := &ReceiveQueue{
+		IdentifyMsg: HandleMadesSendEventMessage,
+		Queue:       NewQueue(b.messageTracker, receivedTracker),
+		receiver:    b.outboxConn.receivers[1],
+	}
+
+	return queue
+}
+
+func (b *Bencher) CreateQueueEndpointInbox(trackID int) *ReceiveQueue {
+	inboxTracker := NewTrackable()
+	inboxTracker.Name = "Received in inbox"
+	inboxTracker.EstimatedEventSize = b.payloadSize
+	inboxTracker.Limit = b.payloadCount
+	b.tracker.Trackables[trackID] = inboxTracker
+
+	queue := &ReceiveQueue{
+		IdentifyMsg: HandleMadesInboxMessage,
+		Queue:       NewQueue(b.messageTracker, inboxTracker),
+		receiver:    b.inboxConn.receivers[0],
+	}
+
+	return queue
+}
+
+func (b *Bencher) CleanQueues() {
+	receivers := []*amqp.Receiver{}
+	if b.outboxConn != nil && b.outboxConn.receivers != nil {
+		receivers = append(receivers, b.outboxConn.receivers...)
+	}
+	if b.inboxConn != nil && b.inboxConn.receivers != nil {
+		receivers = append(receivers, b.inboxConn.receivers...)
+	}
+	cleanReceivers(receivers...)
+}
+
+func (b *Bencher) ConfigureForEndpoint() {
+	b.outboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.outboxSocketAddr,
+		sendQueues: []string{b.outbox},
+		recvQueues: []string{b.outboxReply, b.sendEvent, b.outbox},
+	}
+	b.inboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.inboxSocketAddr,
+		recvQueues: []string{b.inbox},
+	}
+
+	b.ConnectQueues()
+	b.CleanQueues()
+	// Close outbox receiver
+	_ = b.outboxConn.receivers[2].Close(context.Background())
+
+	b.ConfigureTracker(5, b.payloadSize)
+	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue.sendChan = ch
+
+	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
+	inboxQueue := b.CreateQueueEndpointInbox(2)
+
+	sendEventQueue := b.CreateQueueEndpointSendEvent(3)
+	sendEventQueue.listenerType = 1 // receive event
+	sendEventQueue.listener = ch
+
 	b.queues = &Queues{
-		SenderQueue: &SenderQueue{
-			CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType),
-			PayloadSize:       b.payloadSize,
-			Queue:             NewQueue(msgTracker, sendTracker),
-			maxUnacknowledged: b.maxInTransit,
-			sender:            b.outboxConn.senders[0],
-			sendChan:          ch,
-			senderCount:       int(b.goroutines),
-		},
+		SenderQueue: outboxQueue,
 		ReceiveQueues: []*ReceiveQueue{
-			&ReceiveQueue{
-				IdentifyMsg: HandleMadesReplyMessage,
-				Queue:       NewQueue(msgTracker, replyTracker),
-				receiver:    b.outboxConn.receivers[0],
-			},
-			&ReceiveQueue{
-				IdentifyMsg: HandleMadesInboxMessage,
-				Queue:       NewQueue(msgTracker, inboxTracker),
-				receiver:    b.inboxConn.receivers[0],
-			},
-			&ReceiveQueue{
-				IdentifyMsg: HandleMadesSendEventMessage,
-				Queue:       NewQueue(msgTracker, deliveryTracker, receivedTracker),
-				receiver:    b.outboxConn.receivers[1],
-			},
+			outboxReplyQueue,
+			inboxQueue,
+			sendEventQueue,
 		},
 	}
-	b.queues.ReceiveQueues[2].listenerType = 1 // receive event
-	b.queues.ReceiveQueues[2].listener = ch
+}
+
+func (b *Bencher) ConfigureForEndpointTracing() {
+	b.outboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.outboxSocketAddr,
+		sendQueues: []string{b.outbox},
+		recvQueues: []string{b.outboxReply, b.sendEvent, b.outbox},
+	}
+
+	b.ConnectQueues()
+	b.CleanQueues()
+	// Close outbox receiver
+	_ = b.outboxConn.receivers[2].Close(context.Background())
+
+	b.ConfigureTracker(3, 1)
+	b.messageTracker = NewMessageTracker()
+	ch := make(MessageEventListener, 10000)
+
+	outboxQueue := b.CreateQueueEndpointOutbox(0, true)
+	outboxQueue.sendChan = ch
+
+	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
+
+	sendEventQueue := b.CreateQueueEndpointSendEventTracing(2)
+	sendEventQueue.listener = ch
+
+	b.queues = &Queues{
+		SenderQueue: outboxQueue,
+		ReceiveQueues: []*ReceiveQueue{
+			outboxReplyQueue,
+			sendEventQueue,
+		},
+	}
+}
+
+func (b *Bencher) ConfigureForAMQP() {
+	b.outboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.outboxSocketAddr,
+		sendQueues: []string{b.inbox},
+	}
+	b.inboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.inboxSocketAddr,
+		recvQueues: []string{b.inbox},
+	}
+
+	b.ConnectQueues()
+	b.CleanQueues()
+
+	b.ConfigureTracker(2, b.payloadSize)
+	b.messageTracker = NewMessageTracker()
+	ch := make(MessageEventListener, 10000)
+
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue.sendChan = ch
+
+	inboxQueue := b.CreateQueueEndpointInbox(1)
+	inboxQueue.listener = ch
+
+	b.queues = &Queues{
+		SenderQueue: outboxQueue,
+		ReceiveQueues: []*ReceiveQueue{
+			inboxQueue,
+		},
+	}
+
+}
+func (b *Bencher) ConfigureForToolbox() {
+	b.outboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.outboxSocketAddr,
+		sendQueues: []string{b.outbox},
+		recvQueues: []string{b.outboxReply, b.outbox},
+	}
+	b.inboxConnOpts = &AMQPConnOpts{
+		socketAddr: b.inboxSocketAddr,
+		recvQueues: []string{b.inbox},
+	}
+
+	b.ConnectQueues()
+	b.CleanQueues()
+	// Close outbox receiver
+	_ = b.outboxConn.receivers[1].Close(context.Background())
+
+	b.ConfigureTracker(3, b.payloadSize)
+	b.messageTracker = NewMessageTracker()
+	ch := make(MessageEventListener, 10000)
+
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue.sendChan = ch
+
+	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
+	outboxReplyQueue.listener = ch
+	inboxQueue := b.CreateQueueEndpointInbox(2)
+
+	b.queues = &Queues{
+		SenderQueue: outboxQueue,
+		ReceiveQueues: []*ReceiveQueue{
+			outboxReplyQueue,
+			inboxQueue,
+		},
+	}
 }
 
 func (bencher *Bencher) startBenching() {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"log"
@@ -47,6 +46,9 @@ func main() {
 	flag.StringVar(&bencher.inboxAmqpUser, "inbox-user", "endpoint", "Inbox broker password")
 	flag.StringVar(&bencher.inboxAmqpPass, "inbox-pass", "password", "Inbox broker username")
 
+	var mode string
+	flag.StringVar(&mode, "mode", "endpoint", "mode")
+
 	flag.Parse()
 
 	// Print used flags
@@ -56,12 +58,19 @@ func main() {
 	fmt.Print("\n")
 
 	defer bencher.close()
-	bencher.prepareOutbox()
-	bencher.prepareInbox()
-	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver, bencher.outboxConn.receivers[2])
-	_ = bencher.outboxConn.receivers[2].Close(context.Background())
 
-	bencher.ConfigureForEndpoint()
+	switch mode {
+	case "endpoint":
+		bencher.ConfigureForEndpoint()
+	case "tracing":
+		bencher.ConfigureForEndpointTracing()
+	case "amqp":
+		bencher.ConfigureForAMQP()
+	case "toolbox":
+		bencher.ConfigureForToolbox()
+	default:
+		zap.L().Panic("unknown mode", zap.String("mode", mode))
+	}
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt, syscall.SIGTERM)
