@@ -159,11 +159,11 @@ func (t *Trackable) Duration() time.Duration {
 
 func (t *Trackable) BenchResults(w io.Writer) {
 	column1Len := 18
-	column2Len := 10
-	column3Len := 15
+	column2Len := 19
+	column3Len := 12
 	column4Len := 20
 	column5Len := 20
-	column6Len := 30
+	column6Len := 25
 
 	t.m.Lock()
 	t.Stats.m.Lock()
@@ -179,28 +179,36 @@ func (t *Trackable) BenchResults(w io.Writer) {
 	t.m.Unlock()
 
 	w.Write([]byte(t.Name))
-	w.Write(bytes.Repeat([]byte{' '}, column1Len-len(t.Name)))
+	w.Write(columnSpacer(column1Len, len(t.Name)))
 
-	msgsPerSecStr := fmt.Sprintf("%.3f", msgsPerSec)
+	msgsPerSecStr := fmt.Sprintf(": %.3f msgs/s", msgsPerSec)
 	w.Write([]byte(msgsPerSecStr))
-	w.Write(bytes.Repeat([]byte{' '}, column2Len-len(msgsPerSecStr)))
+	w.Write(columnSpacer(column2Len, len(msgsPerSecStr)))
 
-	throughputDataStr := fmt.Sprintf("%.3f", throughputData)
+	throughputDataStr := fmt.Sprintf("%.3f mb/s", throughputData)
 	w.Write([]byte(throughputDataStr))
-	w.Write(bytes.Repeat([]byte{' '}, column3Len-len(throughputDataStr)))
+	w.Write(columnSpacer(column3Len, len(throughputDataStr)))
 
 	cStr := fmt.Sprintf("%d/%d msgs", c, t.Limit)
 	w.Write([]byte(cStr))
-	w.Write(bytes.Repeat([]byte{' '}, column4Len-len(cStr)))
+	w.Write(columnSpacer(column4Len, len(cStr)))
 
 	durationStr := fmt.Sprintf("duration: %s", duration.Round(time.Millisecond))
 	w.Write([]byte(durationStr))
-	w.Write(bytes.Repeat([]byte{' '}, column5Len-len(durationStr)))
+	w.Write(columnSpacer(column5Len, len(durationStr)))
 
 	avgStr := fmt.Sprintf("flight time: %.3fs (avg)", avg.Seconds())
 	w.Write([]byte(avgStr))
-	w.Write(bytes.Repeat([]byte{' '}, column6Len-len(avgStr)))
+	w.Write(columnSpacer(column6Len, len(avgStr)))
 
 	medianStr := fmt.Sprintf("%.3fs (median)\n", median.Seconds())
 	w.Write([]byte(medianStr))
+}
+
+func columnSpacer(minLen int, usedLen int) []byte {
+	spaceLen := minLen - usedLen
+	if spaceLen <= 0 {
+		spaceLen = 1
+	}
+	return bytes.Repeat([]byte{' '}, spaceLen)
 }
