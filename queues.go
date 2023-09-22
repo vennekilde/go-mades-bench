@@ -69,15 +69,16 @@ func (s *SenderQueue) Start() {
 	var n atomic.Uint64
 	limit := s.Queue.Trackables[0].Limit
 
-	done := make(chan struct{})
 	for i := 0; i < s.senderCount; i++ {
 		go func() {
 			for {
 				<-s.sendChan
 				id := n.Add(1)
 				if id > limit && limit > 0 {
-					done <- struct{}{}
-					break
+					for {
+						// empty queue
+						<-s.sendChan
+					}
 				}
 				s.Send(id)
 			}
