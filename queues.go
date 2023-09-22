@@ -181,7 +181,7 @@ func (r *ReceiveQueue) Start() {
 	}
 }
 
-func (r *ReceiveQueue) ReceiveMessage(msg *amqp.Message) error {
+func (r *ReceiveQueue) ReceiveMessage(msg *amqp.Message) {
 	msgIdent, msgID, trackableType := r.IdentifyMsg(r.Queue.MessageTracker, msg)
 	if msgIdent == nil {
 		zap.L().Warn("unknown message", zap.Any("msg", msg))
@@ -194,8 +194,6 @@ func (r *ReceiveQueue) ReceiveMessage(msg *amqp.Message) error {
 			zap.Any("msgIdent", msgIdent),
 			zap.Any("ApplicationProperties", msg.ApplicationProperties))
 	}
-
-	return nil
 }
 
 func identifyMsgByCorrelationID(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string) {

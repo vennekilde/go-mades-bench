@@ -59,7 +59,7 @@ func main() {
 	bencher.prepareOutbox()
 	bencher.prepareInbox()
 	cleanReceivers(bencher.inboxReceiver, bencher.outboxReplyReceiver, bencher.sendEventReceiver, bencher.outboxConn.receivers[2])
-	bencher.outboxConn.receivers[2].Close(context.Background())
+	_ = bencher.outboxConn.receivers[2].Close(context.Background())
 
 	bencher.ConfigureForEndpoint()
 

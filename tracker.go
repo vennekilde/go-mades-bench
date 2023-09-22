@@ -98,25 +98,25 @@ func (t *Tracker) eventCount() uint64 {
 func (t *Tracker) BenchResults(w io.Writer) {
 	t.calcMedians()
 
-	w.Write([]byte("==============================================================================\n"))
-	w.Write([]byte(fmt.Sprintf("Started at       : %s\n", t.Start.Format(time.RFC3339))))
+	_, _ = w.Write([]byte("==============================================================================\n"))
+	_, _ = w.Write([]byte(fmt.Sprintf("Started at       : %s\n", t.Start.Format(time.RFC3339))))
 
 	var duration time.Duration
 	if !t.End.IsZero() {
-		w.Write([]byte(fmt.Sprintf("Ended at         : %s\n", t.End.Format(time.RFC3339))))
+		_, _ = w.Write([]byte(fmt.Sprintf("Ended at         : %s\n", t.End.Format(time.RFC3339))))
 		duration = t.End.Sub(t.Start)
 	} else {
 		duration = time.Since(t.Start)
 	}
-	w.Write([]byte(fmt.Sprintf("Duration         : %s\n", duration.String())))
-	w.Write([]byte(fmt.Sprintf("Msg size         : %d bytes\n\n", t.PayloadSize)))
-	w.Write([]byte("=== Statistics\n"))
+	_, _ = w.Write([]byte(fmt.Sprintf("Duration         : %s\n", duration.String())))
+	_, _ = w.Write([]byte(fmt.Sprintf("Msg size         : %d bytes\n\n", t.PayloadSize)))
+	_, _ = w.Write([]byte("=== Statistics\n"))
 
 	for _, trackable := range t.Trackables {
 		trackable.BenchResults(w)
 	}
 
-	w.Write([]byte("==============================================================================\n"))
+	_, _ = w.Write([]byte("==============================================================================\n"))
 }
 
 type Trackable struct {
@@ -178,31 +178,31 @@ func (t *Trackable) BenchResults(w io.Writer) {
 	t.Stats.m.Unlock()
 	t.m.Unlock()
 
-	w.Write([]byte(t.Name))
-	w.Write(columnSpacer(column1Len, len(t.Name)))
+	_, _ = w.Write([]byte(t.Name))
+	_, _ = w.Write(columnSpacer(column1Len, len(t.Name)))
 
 	msgsPerSecStr := fmt.Sprintf(": %.3f msgs/s", msgsPerSec)
-	w.Write([]byte(msgsPerSecStr))
-	w.Write(columnSpacer(column2Len, len(msgsPerSecStr)))
+	_, _ = w.Write([]byte(msgsPerSecStr))
+	_, _ = w.Write(columnSpacer(column2Len, len(msgsPerSecStr)))
 
 	throughputDataStr := fmt.Sprintf("%.3f mb/s", throughputData)
-	w.Write([]byte(throughputDataStr))
-	w.Write(columnSpacer(column3Len, len(throughputDataStr)))
+	_, _ = w.Write([]byte(throughputDataStr))
+	_, _ = w.Write(columnSpacer(column3Len, len(throughputDataStr)))
 
 	cStr := fmt.Sprintf("%d/%d msgs", c, t.Limit)
-	w.Write([]byte(cStr))
-	w.Write(columnSpacer(column4Len, len(cStr)))
+	_, _ = w.Write([]byte(cStr))
+	_, _ = w.Write(columnSpacer(column4Len, len(cStr)))
 
 	durationStr := fmt.Sprintf("duration: %s", duration.Round(time.Millisecond))
-	w.Write([]byte(durationStr))
-	w.Write(columnSpacer(column5Len, len(durationStr)))
+	_, _ = w.Write([]byte(durationStr))
+	_, _ = w.Write(columnSpacer(column5Len, len(durationStr)))
 
 	avgStr := fmt.Sprintf("flight time: %.3fs (avg)", avg.Seconds())
-	w.Write([]byte(avgStr))
-	w.Write(columnSpacer(column6Len, len(avgStr)))
+	_, _ = w.Write([]byte(avgStr))
+	_, _ = w.Write(columnSpacer(column6Len, len(avgStr)))
 
 	medianStr := fmt.Sprintf("%.3fs (median)\n", median.Seconds())
-	w.Write([]byte(medianStr))
+	_, _ = w.Write([]byte(medianStr))
 }
 
 func columnSpacer(minLen int, usedLen int) []byte {
