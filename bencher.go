@@ -30,9 +30,6 @@ type BencherFlags struct {
 	inboxSocketAddr string
 	inboxAmqpUser   string
 	inboxAmqpPass   string
-
-	tracker *Tracker
-	queues  *Queues
 }
 
 type Bencher struct {
@@ -47,6 +44,9 @@ type Bencher struct {
 	// Inbox AMQP receiver
 	inboxConn     *AMQPConn
 	inboxReceiver *amqp.Receiver
+
+	tracker *Tracker
+	queues  *Queues
 }
 
 func NewBencher() *Bencher {
