@@ -47,7 +47,7 @@ func main() {
 	flag.StringVar(&bencher.inboxAmqpPass, "inbox-pass", "password", "Inbox broker username")
 
 	var mode string
-	flag.StringVar(&mode, "mode", "endpoint", "mode")
+	flag.StringVar(&mode, "mode", "endpoint", "mode (endpoint, toolbox, amqp, tracing)")
 
 	flag.Parse()
 

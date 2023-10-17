@@ -82,7 +82,7 @@ func (b *Bencher) ConfigureTracker(trackerCount int, payloadSize uint64) {
 	}
 }
 
-func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool) *SenderQueue {
+func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool, eventFlags int) *SenderQueue {
 	sendTracker := NewTrackable()
 	sendTracker.Name = "Sent to outbox"
 	sendTracker.EstimatedEventSize = b.payloadSize
@@ -90,7 +90,7 @@ func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool) *Sender
 	b.tracker.Trackables[trackID] = sendTracker
 
 	queue := &SenderQueue{
-		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing),
+		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing, eventFlags),
 		PayloadSize:       b.payloadSize,
 		Queue:             NewQueue(b.messageTracker, sendTracker),
 		maxUnacknowledged: b.maxInTransit,
@@ -202,7 +202,7 @@ func (b *Bencher) ConfigureForEndpoint() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b1111)
 	outboxQueue.sendChan = ch
 
 	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
@@ -238,7 +238,7 @@ func (b *Bencher) ConfigureForEndpointTracing() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, true)
+	outboxQueue := b.CreateQueueEndpointOutbox(0, true, 0b111)
 	outboxQueue.sendChan = ch
 
 	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
@@ -272,7 +272,7 @@ func (b *Bencher) ConfigureForAMQP() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b10)
 	outboxQueue.sendChan = ch
 
 	inboxQueue := b.CreateQueueEndpointInbox(1)
@@ -306,7 +306,7 @@ func (b *Bencher) ConfigureForToolbox() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false)
+	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b11)
 	outboxQueue.sendChan = ch
 
 	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)

@@ -39,8 +39,10 @@ func (m *MessageTracker) Delete(msgID string) {
 }
 
 type MessageIdent struct {
-	ID      uint64
-	Created time.Time
+	ID          uint64
+	Created     time.Time
+	Count       uint8
+	EventsFlags int
 }
 
 type Tracker struct {
