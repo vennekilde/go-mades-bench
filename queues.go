@@ -214,8 +214,12 @@ func identifyMsgByCorrelationID(messageTracker *MessageTracker, msg *amqp.Messag
 	}
 
 	correlationID := msg.Properties.CorrelationID.(string)
+	msgID := msg.ApplicationProperties["messageID"].(string)
+	msgIdent := messageTracker.Get(correlationID)
+	messageTracker.Add(msgID, msgIdent)
+	messageTracker.Delete(correlationID)
 
-	return msgIdent, correlationID
+	return msgIdent, msgID
 }
 
 func identifyMsgByBaMsgID(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string) {
@@ -228,7 +232,16 @@ func identifyMsgByBaMsgID(messageTracker *MessageTracker, msg *amqp.Message) (*M
 	return msgIdent, baMsgID
 }
 
-func HandleMadesReplyMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int) {
+func identifyMsgByMsgID(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string) {
+	msgID, ok := msg.ApplicationProperties["messageID"].(string)
+	if !ok {
+		return nil, ""
+	}
+	msgIdent := messageTracker.Get(msgID)
+
+	return msgIdent, msgID
+}
+
 func HandleMadesReplyMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint) {
 	msgIdent, msgID := identifyMsgByCorrelationID(messageTracker, msg)
 	return msgIdent, msgID, 0, 0
@@ -236,12 +249,17 @@ func HandleMadesReplyMessage(messageTracker *MessageTracker, msg *amqp.Message) 
 
 func HandleMadesInboxMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint) {
 	msgIdent, msgID := identifyMsgByBaMsgID(messageTracker, msg)
-	return msgIdent, msgID, 0
+	if msgIdent == nil {
+		msgIdent, msgID = identifyMsgByMsgID(messageTracker, msg)
+	}
 	return msgIdent, msgID, 0, 1
 }
 
 func HandleMadesSendEventMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint) {
 	msgIdent, msgID := identifyMsgByBaMsgID(messageTracker, msg)
+	if msgIdent == nil {
+		msgIdent, msgID = identifyMsgByMsgID(messageTracker, msg)
+	}
 	if msg.Value != nil {
 		switch msg.Value.(string) {
 		case "DELIVERED":
