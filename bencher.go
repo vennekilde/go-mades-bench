@@ -171,6 +171,22 @@ func (b *Bencher) CreateQueueEndpointInbox(trackID int) *ReceiveQueue {
 	return queue
 }
 
+func (b *Bencher) CreateQueueToolboxOutboxReply(trackID int) *ReceiveQueue {
+	replyTracker := NewTrackable()
+	replyTracker.Name = "Received reply"
+	replyTracker.EstimatedEventSize = 100 // Roughly
+	replyTracker.Limit = b.payloadCount
+	b.tracker.Trackables[trackID] = replyTracker
+
+	queue := &ReceiveQueue{
+		IdentifyMsg: HandleToolboxReplyMessage,
+		Queue:       NewQueue(b.messageTracker, replyTracker),
+		receiver:    b.outboxConn.receivers[0],
+	}
+
+	return queue
+}
+
 func (b *Bencher) CleanQueues() {
 	receivers := []*amqp.Receiver{}
 	if b.outboxConn != nil && b.outboxConn.receivers != nil {
@@ -309,9 +325,10 @@ func (b *Bencher) ConfigureForToolbox() {
 	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b11)
 	outboxQueue.sendChan = ch
 
-	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
+	inboxQueue := b.CreateQueueEndpointInbox(1)
+
+	outboxReplyQueue := b.CreateQueueToolboxOutboxReply(2)
 	outboxReplyQueue.listener = ch
-	inboxQueue := b.CreateQueueEndpointInbox(2)
 
 	b.queues = &Queues{
 		SenderQueue: outboxQueue,

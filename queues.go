@@ -248,6 +248,11 @@ func HandleMadesReplyMessage(messageTracker *MessageTracker, msg *amqp.Message) 
 	return msgIdent, msgID, 0, 0
 }
 
+func HandleToolboxReplyMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint) {
+	msgIdent, msgID := identifyMsgByBaMsgID(messageTracker, msg)
+	return msgIdent, msgID, 0, 0
+}
+
 func HandleMadesInboxMessage(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint) {
 	msgIdent, msgID := identifyMsgByBaMsgID(messageTracker, msg)
 	if msgIdent == nil {
