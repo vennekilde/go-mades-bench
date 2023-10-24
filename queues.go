@@ -126,6 +126,7 @@ func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bo
 			ApplicationProperties: map[string]interface{}{
 				"receiverCode":      receiverCode,
 				"messageType":       messageType,
+				"businessType":      messageType,
 				"baMessageID":       baMessageID,
 				"isTracingMessage":  isTracing,
 				"senderApplication": "Go-MADES-Bench",
