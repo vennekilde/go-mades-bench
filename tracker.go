@@ -144,7 +144,7 @@ func NewTrackable() *Trackable {
 func (t *Trackable) Add(duration time.Duration) {
 	t.Stats.Add(duration)
 	t.Stats.m.Lock()
-	if t.Stats.count >= t.Limit {
+	if t.Stats.count >= t.Limit && !t.Completed {
 		t.End = time.Now()
 		t.Completed = true
 		t.CompletedLock.Unlock()
