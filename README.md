@@ -1,6 +1,8 @@
 # Go Mades Bench
 
-This is a benchmark tool for testing message throughput for applications implementing the ECP variant of the MADES Communication Standard
+This is a benchmark tool for testing message throughput for applications implementing the [Energy Communication Platform (ECP)](https://www.entsoe.eu/ecco-sp/info/) variant of the [MADES Communication Standard](https://eepublicdownloads.entsoe.eu/clean-documents/EDI/Library/depreciated/503_mades-v1r1.pdf)
+
+The tool uses the AMQP Business Application (BA) API in order to send & receive messages and measures the timestamps of each AMQP event (create, send, inbox, delivered, received)
 
 ## Installation
 
