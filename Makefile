@@ -2,7 +2,7 @@ BIN_NAME = go-mades-bench
 
 .build(%): export CGO_ENABLED=0
 .build(%):
-	go build -installsuffix 'static' -o ./bin/$(BIN_NAME) .
+	go build -ldflags="-s -w" -installsuffix 'static' -o ./bin/$(BIN_NAME) .
 
 build: .build(native)
 build_all: build_linux build_windows
