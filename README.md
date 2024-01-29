@@ -42,9 +42,11 @@ Usage of go-mades-bench:
   -inbox-user string
         Inbox broker password (default "endpoint")
   -max-in-transit uint
-        Max messages allowed in transit. max-in-transit <= 0 means unlimited
+        Max messages allowed in transit. max-in-transit <= 0 means unlimited (default 1000)
   -message-type string
         Message type to send messages with (default "TEST-MESSAGE")
+  -mode string
+        mode (endpoint, toolbox, amqp, tracing) (default "endpoint")
   -n uint
         Number of messages to send (default 10000)
   -outbox string
