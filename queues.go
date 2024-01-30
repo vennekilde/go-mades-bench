@@ -191,7 +191,12 @@ func (r *ReceiveQueue) ReceiveMessage(msg *amqp.Message) {
 		zap.L().Warn("unknown message", zap.Any("applicationProperties", msg.ApplicationProperties), zap.Any("properties", msg.Properties))
 		goto skipTracking
 	}
-	r.Queue.onMessage(trackableType, msgIdent, msgID)
+	if hasBit(msgIdent.EventsFlags, eventID) {
+		// only send to listener, if not already registered
+		r.Queue.onMessage(trackableType, msgIdent, msgID)
+	} else {
+		zap.L().Warn("received msg more than once", zap.Any("applicationProperties", msg.ApplicationProperties), zap.Any("properties", msg.Properties))
+	}
 
 	// Track message events
 	msgIdent.EventsFlags = clearBit(msgIdent.EventsFlags, eventID)
