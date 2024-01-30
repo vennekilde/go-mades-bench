@@ -1,6 +1,8 @@
 # Go Mades Bench
 
-This is a benchmark tool for testing message throughput for applications implementing the ECP variant of the MADES Communication Standard
+This is a benchmark tool for testing message throughput for applications implementing the [Energy Communication Platform (ECP)](https://www.entsoe.eu/ecco-sp/info/) variant of the [MADES Communication Standard](https://eepublicdownloads.entsoe.eu/clean-documents/EDI/Library/depreciated/503_mades-v1r1.pdf)
+
+The tool uses the AMQP Business Application (BA) API in order to send & receive messages and measures the timestamps of each AMQP event (create, send, inbox, delivered, received)
 
 ## Installation
 
@@ -40,9 +42,11 @@ Usage of go-mades-bench:
   -inbox-user string
         Inbox broker password (default "endpoint")
   -max-in-transit uint
-        Max messages allowed in transit. max-in-transit <= 0 means unlimited
+        Max messages allowed in transit. max-in-transit <= 0 means unlimited (default 1000)
   -message-type string
         Message type to send messages with (default "TEST-MESSAGE")
+  -mode string
+        mode (endpoint, toolbox, amqp, tracing) (default "endpoint")
   -n uint
         Number of messages to send (default 10000)
   -outbox string
