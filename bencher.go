@@ -273,7 +273,7 @@ func (b *Bencher) ConfigureForEndpointTracing() {
 
 func (b *Bencher) ConfigureForAMQP() {
 	b.outboxConnOpts = &AMQPConnOpts{
-		socketAddr: b.outboxSocketAddr,
+		socketAddr: b.inboxSocketAddr,
 		sendQueues: []string{b.inbox},
 	}
 	b.inboxConnOpts = &AMQPConnOpts{
