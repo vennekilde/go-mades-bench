@@ -60,7 +60,7 @@ func (bencher *Bencher) ConnectQueues() {
 
 		bencher.inboxConn, err = newAMQPConn(bencher.inboxConnOpts)
 		if err != nil {
-			log.Fatal("Unable to create outbox AMQP client:", err)
+			log.Fatal("Unable to create inbox AMQP client:", err)
 		}
 	}
 
@@ -70,7 +70,7 @@ func (bencher *Bencher) ConnectQueues() {
 
 		bencher.outboxConn, err = newAMQPConn(bencher.outboxConnOpts)
 		if err != nil {
-			log.Fatal("Unable to create inbox AMQP client:", err)
+			log.Fatal("Unable to create outbox AMQP client:", err)
 		}
 	}
 }
@@ -82,7 +82,7 @@ func (b *Bencher) ConfigureTracker(trackerCount int, payloadSize uint64) {
 	}
 }
 
-func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool, eventFlags int) *SenderQueue {
+func (b *Bencher) CreateQueueEndpointOutbox(conn *AMQPConn, trackID int, isTracing bool, eventFlags int) *SenderQueue {
 	sendTracker := NewTrackable()
 	sendTracker.Name = "Sent to outbox"
 	sendTracker.EstimatedEventSize = b.payloadSize
@@ -94,7 +94,7 @@ func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool, eventFl
 		PayloadSize:       b.payloadSize,
 		Queue:             NewQueue(b.messageTracker, sendTracker),
 		maxUnacknowledged: b.maxInTransit,
-		sender:            b.outboxConn.senders[0],
+		sender:            conn.senders[0],
 		senderCount:       int(b.goroutines),
 	}
 
@@ -218,7 +218,7 @@ func (b *Bencher) ConfigureForEndpoint() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b1111)
+	outboxQueue := b.CreateQueueEndpointOutbox(b.outboxConn, 0, false, 0b1111)
 	outboxQueue.sendChan = ch
 
 	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
@@ -254,7 +254,7 @@ func (b *Bencher) ConfigureForEndpointTracing() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, true, 0b111)
+	outboxQueue := b.CreateQueueEndpointOutbox(b.outboxConn, 0, true, 0b111)
 	outboxQueue.sendChan = ch
 
 	outboxReplyQueue := b.CreateQueueEndpointOutboxReply(1)
@@ -272,12 +272,9 @@ func (b *Bencher) ConfigureForEndpointTracing() {
 }
 
 func (b *Bencher) ConfigureForAMQP() {
-	b.outboxConnOpts = &AMQPConnOpts{
-		socketAddr: b.inboxSocketAddr,
-		sendQueues: []string{b.inbox},
-	}
 	b.inboxConnOpts = &AMQPConnOpts{
 		socketAddr: b.inboxSocketAddr,
+		sendQueues: []string{b.inbox},
 		recvQueues: []string{b.inbox},
 	}
 
@@ -288,7 +285,7 @@ func (b *Bencher) ConfigureForAMQP() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b10)
+	outboxQueue := b.CreateQueueEndpointOutbox(b.inboxConn, 0, false, 0b10)
 	outboxQueue.sendChan = ch
 
 	inboxQueue := b.CreateQueueEndpointInbox(1)
@@ -322,7 +319,7 @@ func (b *Bencher) ConfigureForToolbox() {
 	b.messageTracker = NewMessageTracker()
 	ch := make(MessageEventListener, 10000)
 
-	outboxQueue := b.CreateQueueEndpointOutbox(0, false, 0b11)
+	outboxQueue := b.CreateQueueEndpointOutbox(b.outboxConn, 0, false, 0b11)
 	outboxQueue.sendChan = ch
 
 	inboxQueue := b.CreateQueueEndpointInbox(1)
