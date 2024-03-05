@@ -1,4 +1,4 @@
-# github.com/Azure/go-amqp v1.0.2
+# github.com/Azure/go-amqp v1.0.5
 ## explicit; go 1.18
 github.com/Azure/go-amqp
 github.com/Azure/go-amqp/internal/bitmap
@@ -8,13 +8,13 @@ github.com/Azure/go-amqp/internal/encoding
 github.com/Azure/go-amqp/internal/frames
 github.com/Azure/go-amqp/internal/queue
 github.com/Azure/go-amqp/internal/shared
-# github.com/google/uuid v1.3.0
+# github.com/google/uuid v1.6.0
 ## explicit
 github.com/google/uuid
 # go.uber.org/multierr v1.11.0
 ## explicit; go 1.19
 go.uber.org/multierr
-# go.uber.org/zap v1.26.0
+# go.uber.org/zap v1.27.0
 ## explicit; go 1.19
 go.uber.org/zap
 go.uber.org/zap/buffer
