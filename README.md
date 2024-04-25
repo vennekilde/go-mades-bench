@@ -31,6 +31,8 @@ make build_windows
 > go-mades-bench -h
 
 Usage of go-mades-bench:
+  -durable
+        Should AMQP messages sent to the API broker be persisted (default true)
   -goroutines uint
         Number of go routines to use when sending (default "number of CPU vCores")
   -inbox string
