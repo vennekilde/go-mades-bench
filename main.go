@@ -33,6 +33,7 @@ func main() {
 	flag.Uint64Var(&bencher.goroutines, "goroutines", uint64(runtime.NumCPU()), "Number of go routines to use when sending")
 	flag.StringVar(&bencher.receiverCode, "receiver", "ecp-endpoint", "Receiver Component Code")
 	flag.StringVar(&bencher.messageType, "message-type", "TEST-MESSAGE", "Message type to send messages with")
+	flag.BoolVar(&bencher.durable, "durable", true, "Should AMQP messages sent to the API broker be persisted")
 
 	flag.StringVar(&bencher.sendEvent, "outbox-send-event", "ecp.endpoint.send.event", "send event queue")
 	flag.StringVar(&bencher.outboxReply, "outbox-reply", "ecp.endpoint.outbox.reply", "outbox reply queue")

@@ -16,6 +16,7 @@ type BencherFlags struct {
 	payloadCount uint64
 	goroutines   uint64
 	maxInTransit uint64
+	durable      bool
 
 	receiverCode string
 	messageType  string
@@ -90,7 +91,7 @@ func (b *Bencher) CreateQueueEndpointOutbox(trackID int, isTracing bool, eventFl
 	b.tracker.Trackables[trackID] = sendTracker
 
 	queue := &SenderQueue{
-		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing, eventFlags),
+		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing, eventFlags, b.durable),
 		PayloadSize:       b.payloadSize,
 		Queue:             NewQueue(b.messageTracker, sendTracker),
 		maxUnacknowledged: b.maxInTransit,

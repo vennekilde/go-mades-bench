@@ -114,7 +114,7 @@ func (s *SenderQueue) Send(id uint64) {
 	s.Queue.onMessage(0, msgIdent, baMsgId)
 }
 
-func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bool, eventFlags int) MsgCreator {
+func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bool, eventFlags int, durable bool) MsgCreator {
 	return func(id uint64, size uint64) (*amqp.Message, string, *MessageIdent) {
 		payload := make([]byte, size)
 		fillPayloadWithData(payload)
@@ -136,7 +136,7 @@ func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bo
 				CorrelationID: baMessageID,
 			},
 			Header: &amqp.MessageHeader{
-				Durable: false,
+				Durable: durable,
 			},
 		}
 
