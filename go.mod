@@ -1,6 +1,6 @@
 module github.com/vennekilde/go-mades-bench
 
-go 1.21
+go 1.21.0
 
 // Required for AMQP
 require github.com/Azure/go-amqp v1.0.5
