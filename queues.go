@@ -136,7 +136,7 @@ func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bo
 				CorrelationID: baMessageID,
 			},
 			Header: &amqp.MessageHeader{
-				Durable: true,
+				Durable: false,
 			},
 		}
 
@@ -162,26 +162,30 @@ func fillPayloadWithData(data []byte) {
 type ReceiveQueue struct {
 	Queue
 	IdentifyMsg func(messageTracker *MessageTracker, msg *amqp.Message) (*MessageIdent, string, int, uint)
-	receiver    *amqp.Receiver
+	receivers   []*amqp.Receiver
 }
 
 func (r *ReceiveQueue) Start() {
 	ctx := context.Background()
-	for {
-		// Receive next message
-		msg, err := r.receiver.Receive(ctx, nil)
-		if err != nil {
-			if r.Trackables[0].Completed {
-				break
+	for _, receiver := range r.receivers {
+		go func(receiver *amqp.Receiver) {
+			for {
+				// Receive next message
+				msg, err := receiver.Receive(ctx, nil)
+				if err != nil {
+					if r.Trackables[0].Completed {
+						break
+					}
+					zap.L().Fatal("Reading message from AMQP", zap.Error(err))
+				}
+				r.ReceiveMessage(msg)
+				// Accept message
+				err = receiver.AcceptMessage(ctx, msg)
+				if err != nil {
+					log.Fatal("Accepting message from AMQP:", err)
+				}
 			}
-			zap.L().Fatal("Reading message from AMQP", zap.Error(err))
-		}
-		r.ReceiveMessage(msg)
-		// Accept message
-		err = r.receiver.AcceptMessage(ctx, msg)
-		if err != nil {
-			log.Fatal("Accepting message from AMQP:", err)
-		}
+		}(receiver)
 	}
 }
 
@@ -217,6 +221,10 @@ func identifyMsgByCorrelationID(messageTracker *MessageTracker, msg *amqp.Messag
 	// Correlation id is used for outbox.reply events
 	if msg.Properties == nil || msg.Properties.CorrelationID == nil {
 		return nil, ""
+	}
+
+	if msg.ApplicationProperties["errorCode"] != nil {
+		zap.L().Panic("received message error code", zap.Any("ApplicationProperties", msg.ApplicationProperties))
 	}
 
 	correlationID := msg.Properties.CorrelationID.(string)
