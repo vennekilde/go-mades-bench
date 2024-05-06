@@ -25,12 +25,25 @@ make build_linux
 make build_windows
 ```
 
+## Docker 
+
+If you need to run the CLI tool in a docker container, you can run the docker image using the following commands:
+
+```bash
+# Launch container and name it go-mades-bench
+docker run -d --name go-mades-bench ghcr.io/vennekilde/go-mades-bench:v1.0.0
+# Create a shell within the newly launched container
+docker exec -it go-mades-bench /bin/bash
+```
+
 ## Usage
 
 ```
 > go-mades-bench -h
 
 Usage of go-mades-bench:
+  -durable
+        Should AMQP messages sent to the API broker be persisted (default true)
   -goroutines uint
         Number of go routines to use when sending (default "number of CPU vCores")
   -inbox string

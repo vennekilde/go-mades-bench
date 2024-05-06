@@ -16,6 +16,7 @@ type BencherFlags struct {
 	payloadCount uint64
 	goroutines   uint64
 	maxInTransit uint64
+	durable      bool
 
 	receiverCode string
 	messageType  string
@@ -90,7 +91,7 @@ func (b *Bencher) CreateQueueEndpointOutbox(conn *AMQPConn, trackID int, isTraci
 	b.tracker.Trackables[trackID] = sendTracker
 
 	queue := &SenderQueue{
-		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing, eventFlags),
+		CreateMsg:         CreateMadesMsgCreator(b.receiverCode, b.messageType, isTracing, eventFlags, b.durable),
 		PayloadSize:       b.payloadSize,
 		Queue:             NewQueue(b.messageTracker, sendTracker),
 		maxUnacknowledged: b.maxInTransit,
@@ -111,7 +112,9 @@ func (b *Bencher) CreateQueueEndpointOutboxReply(trackID int) *ReceiveQueue {
 	queue := &ReceiveQueue{
 		IdentifyMsg: HandleMadesReplyMessage,
 		Queue:       NewQueue(b.messageTracker, replyTracker),
-		receiver:    b.outboxConn.receivers[0],
+		receivers: []*amqp.Receiver{
+			b.outboxConn.receivers[0],
+		},
 	}
 
 	return queue
@@ -133,7 +136,9 @@ func (b *Bencher) CreateQueueEndpointSendEvent(trackID int) *ReceiveQueue {
 	queue := &ReceiveQueue{
 		IdentifyMsg: HandleMadesSendEventMessage,
 		Queue:       NewQueue(b.messageTracker, deliveryTracker, receivedTracker),
-		receiver:    b.outboxConn.receivers[1],
+		receivers: []*amqp.Receiver{
+			b.outboxConn.receivers[1],
+		},
 	}
 
 	return queue
@@ -149,7 +154,9 @@ func (b *Bencher) CreateQueueEndpointSendEventTracing(trackID int) *ReceiveQueue
 	queue := &ReceiveQueue{
 		IdentifyMsg: HandleMadesSendEventMessage,
 		Queue:       NewQueue(b.messageTracker, receivedTracker),
-		receiver:    b.outboxConn.receivers[1],
+		receivers: []*amqp.Receiver{
+			b.outboxConn.receivers[1],
+		},
 	}
 
 	return queue
@@ -165,7 +172,9 @@ func (b *Bencher) CreateQueueEndpointInbox(trackID int) *ReceiveQueue {
 	queue := &ReceiveQueue{
 		IdentifyMsg: HandleMadesInboxMessage,
 		Queue:       NewQueue(b.messageTracker, inboxTracker),
-		receiver:    b.inboxConn.receivers[0],
+		receivers: []*amqp.Receiver{
+			b.inboxConn.receivers[0],
+		},
 	}
 
 	return queue
@@ -181,7 +190,9 @@ func (b *Bencher) CreateQueueToolboxOutboxReply(trackID int) *ReceiveQueue {
 	queue := &ReceiveQueue{
 		IdentifyMsg: HandleToolboxReplyMessage,
 		Queue:       NewQueue(b.messageTracker, replyTracker),
-		receiver:    b.outboxConn.receivers[0],
+		receivers: []*amqp.Receiver{
+			b.outboxConn.receivers[0],
+		},
 	}
 
 	return queue
@@ -288,14 +299,16 @@ func (b *Bencher) ConfigureForAMQP() {
 	outboxQueue := b.CreateQueueEndpointOutbox(b.inboxConn, 0, false, 0b10)
 	outboxQueue.sendChan = ch
 
-	inboxQueue := b.CreateQueueEndpointInbox(1)
-	inboxQueue.listener = ch
+	inboxReceivers := make([]*ReceiveQueue, b.goroutines)
+	for i := 0; i < int(b.goroutines); i++ {
+		inboxQueue := b.CreateQueueEndpointInbox(i + 1)
+		inboxQueue.listener = ch
+		inboxReceivers[i] = inboxQueue
+	}
 
 	b.queues = &Queues{
-		SenderQueue: outboxQueue,
-		ReceiveQueues: []*ReceiveQueue{
-			inboxQueue,
-		},
+		SenderQueue:   outboxQueue,
+		ReceiveQueues: inboxReceivers,
 	}
 
 }
