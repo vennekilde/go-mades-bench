@@ -115,12 +115,13 @@ func (s *SenderQueue) Send(id uint64) {
 }
 
 func CreateMadesMsgCreator(receiverCode string, messageType string, isTracing bool, eventFlags int) MsgCreator {
+	testID := uuid.New().String()
 	return func(id uint64, size uint64) (*amqp.Message, string, *MessageIdent) {
 		payload := make([]byte, size)
 		fillPayloadWithData(payload)
 
 		creationTime := time.Now()
-		baMessageID := fmt.Sprintf("%d-%s", id, uuid.New().String())
+		baMessageID := fmt.Sprintf("%d-%s", id, testID)
 		msg := &amqp.Message{
 			Data: [][]byte{payload},
 			ApplicationProperties: map[string]interface{}{
