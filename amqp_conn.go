@@ -60,6 +60,14 @@ func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
 				&amqp.SenderOptions{
 					Durability:       amqp.DurabilityUnsettledState,
 					TargetDurability: amqp.DurabilityUnsettledState,
+					TargetCapabilities: []string{
+						// QPID broker capabilities
+						"create-on-demand",
+						"durable",
+						"shared",
+						// Artemis capabilities
+						"queue",
+					},
 				},
 			)
 			if err != nil {
@@ -84,6 +92,14 @@ func newAMQPConn(opts *AMQPConnOpts) (conn *AMQPConn, err error) {
 					Credit:           1000,
 					Durability:       amqp.DurabilityUnsettledState,
 					SourceDurability: amqp.DurabilityUnsettledState,
+					SourceCapabilities: []string{
+						// QPID broker capabilities
+						"create-on-demand",
+						"durable",
+						"shared",
+						// Artemis capabilities
+						"queue",
+					},
 				},
 			)
 			if err != nil {
