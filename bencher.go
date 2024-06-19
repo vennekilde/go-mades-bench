@@ -299,16 +299,12 @@ func (b *Bencher) ConfigureForAMQP() {
 	outboxQueue := b.CreateQueueEndpointOutbox(b.inboxConn, 0, false, 0b10)
 	outboxQueue.sendChan = ch
 
-	inboxReceivers := make([]*ReceiveQueue, b.goroutines)
-	for i := 0; i < int(b.goroutines); i++ {
-		inboxQueue := b.CreateQueueEndpointInbox(i + 1)
-		inboxQueue.listener = ch
-		inboxReceivers[i] = inboxQueue
-	}
+	inboxQueue := b.CreateQueueEndpointInbox(1)
+	inboxQueue.listener = ch
 
 	b.queues = &Queues{
 		SenderQueue:   outboxQueue,
-		ReceiveQueues: inboxReceivers,
+		ReceiveQueues: []*ReceiveQueue{inboxQueue},
 	}
 
 }
